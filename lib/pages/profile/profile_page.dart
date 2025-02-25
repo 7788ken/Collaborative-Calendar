@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'widgets/menu_item.dart';
+import 'about_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -78,11 +79,17 @@ class ProfilePage extends StatelessWidget {
                 },
               ),
               _buildDivider(),
-              MenuItem(
-                icon: Icons.info_outline,
-                title: '关于 App',
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('关于'),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () {
-                  // TODO: 显示关于页面
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AboutPage(),
+                    ),
+                  );
                 },
               ),
               _buildDivider(),

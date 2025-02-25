@@ -137,7 +137,7 @@ class CalendarGrid extends StatelessWidget {
           color: isToday 
             ? Theme.of(context).colorScheme.primary
             : isSelected 
-              ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+              ? Theme.of(context).colorScheme.primary.withAlpha(26)
               : null,
           border: !isToday ? Border.all(
             color: Colors.grey[300]!,
@@ -176,7 +176,7 @@ class CalendarGrid extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: isToday 
-                          ? Colors.white.withOpacity(0.9)  // 今天的指示器背景改为白色
+                          ? Colors.white.withAlpha(230)
                           : Colors.green[100],
                         borderRadius: BorderRadius.circular(4),
                       ),
@@ -201,7 +201,7 @@ class CalendarGrid extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: isToday
-                          ? Colors.white.withOpacity(0.9)  // 今天的指示器背景改为白色
+                          ? Colors.white.withAlpha(230)
                           : Colors.red[100],
                         borderRadius: BorderRadius.circular(4),
                       ),
