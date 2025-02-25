@@ -17,20 +17,15 @@ class TaskItemWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: item.isCompleted ? Colors.green : Colors.red,
-          width: 1,
-        ),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withAlpha(26),
-            spreadRadius: 1,
-            blurRadius: 3,
+            color: Colors.grey.withAlpha(20),
+            blurRadius: 8,
+            spreadRadius: 0,
             offset: const Offset(0, 2),
           ),
         ],
@@ -38,180 +33,105 @@ class TaskItemWidget extends StatelessWidget {
       child: IntrinsicHeight(
         child: Row(
           children: [
-            _buildTimeAxis(),
-            _buildContent(),
-            _buildActions(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTimeAxis() {
-    return Container(
-      width: 80,
-      padding: const EdgeInsets.only(right: 16),
-      decoration: BoxDecoration(
-        border: Border(
-          right: BorderSide(
-            color: Colors.grey.withAlpha(51),
-            width: 1,
-          ),
-        ),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            item.startTime,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Icon(
-            Icons.arrow_downward,
-            size: 14,
-            color: Colors.grey,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            item.endTime,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContent() {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              item.title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+            // 时间指示器
+            Container(
+              width: 60,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withAlpha(20),
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
               ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(
-                  Icons.location_on,
-                  size: 16,
-                  color: Colors.grey,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  item.location,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-            if (item.remark.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  Text(
+                    item.startTime,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const Icon(
-                    Icons.notes,
+                    Icons.keyboard_arrow_down,
                     size: 16,
                     color: Colors.grey,
                   ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      item.remark,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  Text(
+                    item.endTime,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
-            ],
+            ),
+            // 内容区域
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        decoration: item.isCompleted ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    if (item.location.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '📍 ${item.location}',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                    if (item.remark.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        item.remark,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            // 操作按钮
+            Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    item.isCompleted ? Icons.check_circle : Icons.check_circle_outline,
+                    color: item.isCompleted ? Colors.green : Colors.grey[400],
+                  ),
+                  onPressed: onToggleComplete,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  color: Theme.of(context).colorScheme.primary,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AddSchedulePage(scheduleItem: item),
+                      ),
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  color: Colors.red[300],
+                  onPressed: onDelete,
+                ),
+              ],
+            ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildActions(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        IconButton(
-          onPressed: onToggleComplete,
-          icon: Icon(
-            item.isCompleted ? Icons.check_circle : Icons.check_circle_outline,
-            color: item.isCompleted ? Colors.green : Colors.grey,
-            size: 24,
-          ),
-        ),
-        IconButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AddSchedulePage(scheduleItem: item),
-              ),
-            );
-          },
-          icon: const Icon(
-            Icons.edit,
-            color: Colors.grey,
-            size: 20,
-          ),
-        ),
-        IconButton(
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('确认删除'),
-                content: const Text('确定要删除这个日程吗？'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('取消'),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      onDelete();
-                    },
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.red,
-                    ),
-                    child: const Text('删除'),
-                  ),
-                ],
-              ),
-            );
-          },
-          icon: const Icon(
-            Icons.delete_outline,
-            color: Colors.red,
-            size: 20,
-          ),
-        ),
-      ],
     );
   }
 } 
