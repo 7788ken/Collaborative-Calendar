@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 
 class ScheduleItem {
-  final DateTime date;
-  final String time;
   final String title;
+  final String startTime;
+  final String endTime;
   final String location;
   final String remark;
+  final DateTime date;
   bool isCompleted;
 
   ScheduleItem({
-    required this.date,
-    required this.time,
     required this.title,
+    required this.startTime,
+    required this.endTime,
     required this.location,
-    this.remark = '',
+    required this.remark,
+    required this.date,
     this.isCompleted = false,
   });
 } 

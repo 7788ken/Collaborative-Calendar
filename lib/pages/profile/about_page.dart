@@ -6,8 +6,19 @@ class AboutPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('关于'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          '关于',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        iconTheme: IconThemeData(
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

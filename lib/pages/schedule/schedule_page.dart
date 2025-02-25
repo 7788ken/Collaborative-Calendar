@@ -101,171 +101,174 @@ class _SchedulePageState extends State<SchedulePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        SizedBox(
-          height: _calendarHeight,
-          child: CalendarGrid(
-            currentMonth: _currentMonth,
-            selectedDay: _selectedDay,
-            onDaySelected: (date) {
-              setState(() {
-                _selectedDay = date;
-                _resetPanelAndCalendar();
-              });
-            },
-            onMonthChanged: _handleMonthChanged,
-            schedules: _groupSchedulesByDate(_scheduleItems),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Stack(
+        children: [
+          SizedBox(
+            height: _calendarHeight,
+            child: CalendarGrid(
+              currentMonth: _currentMonth,
+              selectedDay: _selectedDay,
+              onDaySelected: (date) {
+                setState(() {
+                  _selectedDay = date;
+                  _resetPanelAndCalendar();
+                });
+              },
+              onMonthChanged: _handleMonthChanged,
+              schedules: _groupSchedulesByDate(_scheduleItems),
+            ),
           ),
-        ),
-        DraggableScrollableSheet(
-          controller: _dragController,
-          initialChildSize: 0.3,
-          minChildSize: 0.1,
-          maxChildSize: 0.9,
-          builder: (context, scrollController) {
-            final selectedDateSchedules = _scheduleItems.where((item) =>
-              item.date.year == _selectedDay.year &&
-              item.date.month == _selectedDay.month &&
-              item.date.day == _selectedDay.day
-            ).toList();
+          DraggableScrollableSheet(
+            controller: _dragController,
+            initialChildSize: 0.3,
+            minChildSize: 0.1,
+            maxChildSize: 0.9,
+            builder: (context, scrollController) {
+              final selectedDateSchedules = _scheduleItems.where((item) =>
+                item.date.year == _selectedDay.year &&
+                item.date.month == _selectedDay.month &&
+                item.date.day == _selectedDay.day
+              ).toList();
 
-            return Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: SafeArea(
-                child: CustomScrollView(
-                  controller: scrollController,
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 拖动指示器
-                          Container(
-                            width: 40,
-                            height: 4,
-                            margin: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[300],
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          // 日期标题
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                            child: Row(
-                              children: [
-                                // 使用 Builder 来构建相对日期标题
-                                Builder(
-                                  builder: (context) {
-                                    final dateDesc = _getDateDescription(_selectedDay);
-                                    if (dateDesc.isEmpty) return const SizedBox.shrink();
-                                    
-                                    return Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          dateDesc,
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            color: Theme.of(context).colorScheme.primary,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          width: 1,
-                                          height: 16,
-                                          color: Colors.grey[300],
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
-                                    );
-                                  },
-                                ),
-                                Text(
-                                  '${_selectedDay.month}月${_selectedDay.day}日',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '${selectedDateSchedules.length}个日程',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Divider(height: 1),
-                        ],
-                      ),
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      spreadRadius: 0,
+                      offset: const Offset(0, -2),
                     ),
-                    // 日程列表
-                    selectedDateSchedules.isEmpty
-                        ? SliverFillRemaining(
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                  ],
+                ),
+                child: SafeArea(
+                  child: CustomScrollView(
+                    controller: scrollController,
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 拖动指示器
+                            Container(
+                              width: 40,
+                              height: 4,
+                              margin: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            // 日期标题
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                              child: Row(
                                 children: [
-                                  Icon(
-                                    Icons.event_note,
-                                    size: 64,
-                                    color: Colors.grey[300],
+                                  // 使用 Builder 来构建相对日期标题
+                                  Builder(
+                                    builder: (context) {
+                                      final dateDesc = _getDateDescription(_selectedDay);
+                                      if (dateDesc.isEmpty) return const SizedBox.shrink();
+                                      
+                                      return Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            dateDesc,
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              color: Theme.of(context).colorScheme.primary,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            width: 1,
+                                            height: 16,
+                                            color: Colors.grey[300],
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                      );
+                                    },
                                   ),
-                                  const SizedBox(height: 16),
                                   Text(
-                                    '暂无日程',
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 16,
+                                    '${_selectedDay.month}月${_selectedDay.day}日',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${selectedDateSchedules.length}个日程',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          )
-                        : SliverPadding(
-                            padding: const EdgeInsets.all(16),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  final item = selectedDateSchedules[index];
-                                  return ScheduleItemWidget(
-                                    item: item,
-                                    onToggleComplete: () {
-                                      setState(() {
-                                        item.isCompleted = !item.isCompleted;
-                                      });
-                                    },
-                                  );
-                                },
-                                childCount: selectedDateSchedules.length,
+                            const Divider(height: 1),
+                          ],
+                        ),
+                      ),
+                      // 日程列表
+                      selectedDateSchedules.isEmpty
+                          ? SliverFillRemaining(
+                              child: Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.event_note,
+                                      size: 64,
+                                      color: Colors.grey[300],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      '暂无日程',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : SliverPadding(
+                              padding: const EdgeInsets.all(16),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    final item = selectedDateSchedules[index];
+                                    return ScheduleItemWidget(
+                                      item: item,
+                                      onToggleComplete: () {
+                                        setState(() {
+                                          item.isCompleted = !item.isCompleted;
+                                        });
+                                      },
+                                    );
+                                  },
+                                  childCount: selectedDateSchedules.length,
+                                ),
                               ),
                             ),
-                          ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
-      ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 } 

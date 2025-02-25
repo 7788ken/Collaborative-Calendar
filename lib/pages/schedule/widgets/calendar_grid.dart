@@ -150,11 +150,14 @@ class CalendarGrid extends StatelessWidget {
           children: [
             Text(
               day.day.toString(),
-              style: TextStyle(
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.black87,
+              ).copyWith(
                 color: !isCurrentMonth
                   ? Colors.grey[400]
                   : isToday
-                    ? Colors.white  // 今天的文字颜色改为白色
+                    ? Colors.white
                     : isSelected 
                       ? Theme.of(context).colorScheme.primary
                       : Colors.black87,
@@ -182,12 +185,13 @@ class CalendarGrid extends StatelessWidget {
                       ),
                       child: Text(
                         completedCount.toString(),
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 10,
-                          color: isToday
-                            ? Colors.green[700]  // 保持文字颜色
-                            : Colors.green[700],
                           fontWeight: FontWeight.bold,
+                        ).copyWith(
+                          color: isToday
+                            ? Colors.green[700]
+                            : Colors.green[700],
                         ),
                       ),
                     ),
@@ -207,12 +211,13 @@ class CalendarGrid extends StatelessWidget {
                       ),
                       child: Text(
                         uncompletedCount.toString(),
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 10,
-                          color: isToday
-                            ? Colors.red[700]  // 保持文字颜色
-                            : Colors.red[700],
                           fontWeight: FontWeight.bold,
+                        ).copyWith(
+                          color: isToday
+                            ? Colors.red[700]
+                            : Colors.red[700],
                         ),
                       ),
                     ),
@@ -247,9 +252,9 @@ class _WeekdayHeader extends StatelessWidget {
         alignment: Alignment.center,
         child: Text(
           text,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 14,
-            color: Colors.grey[600],
+            color: Colors.grey,
             fontWeight: FontWeight.w500,
           ),
         ),

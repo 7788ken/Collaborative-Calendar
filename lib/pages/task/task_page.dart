@@ -8,7 +8,10 @@ class TaskPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const TaskView();
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: const TaskView(),
+    );
   }
 }
 

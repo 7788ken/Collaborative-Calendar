@@ -1,11 +1,74 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 import 'pages/schedule/schedule_page.dart';
 import 'pages/task/task_page.dart';
 import 'pages/profile/profile_page.dart';
 import 'widgets/add_schedule_page.dart';
 
-void main() {
-  runApp(const MyApp());
+// 添加主题状态管理类
+class ThemeProvider with ChangeNotifier {
+  static const String _themeColorKey = 'theme_color';
+  static const Color _defaultColor = Color(0xFF90EE90); // 浅绿色
+
+  SharedPreferences? _prefs;  // 改为可空类型
+  Color _primaryColor = _defaultColor;
+  double _fontSize = 16.0;  // 添加字体大小属性
+
+  Color get primaryColor => _primaryColor;
+  double get fontSize => _fontSize;
+
+  // 初始化方法
+  Future<void> init() async {
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      // 从本地存储读取主题色
+      final colorValue = _prefs?.getInt(_themeColorKey);
+      if (colorValue != null) {
+        _primaryColor = Color(colorValue);
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('初始化主题设置失败: $e');
+    }
+  }
+
+  void updateTheme(Color color) {
+    _primaryColor = color;
+    // 保存到本地存储
+    _prefs?.setInt(_themeColorKey, color.value);  // 使用可空调用
+    notifyListeners();
+  }
+
+  void updateFontSize(double size) {
+    _fontSize = size;
+    notifyListeners();
+  }
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();  // 确保这行在最前面
+  
+  try {
+    final themeProvider = ThemeProvider();
+    await themeProvider.init();  // 等待初始化完成
+
+    runApp(
+      ChangeNotifierProvider.value(
+        value: themeProvider,
+        child: const MyApp(),
+      ),
+    );
+  } catch (e) {
+    debugPrint('应用初始化失败: $e');
+    // 使用默认设置启动应用
+    runApp(
+      ChangeNotifierProvider(
+        create: (_) => ThemeProvider(),
+        child: const MyApp(),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -13,30 +76,44 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: '日程表',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color.fromARGB(255, 235, 186, 8),
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: '日程表'),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: '日程管理',
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: themeProvider.primaryColor,
+            ),
+            textTheme: TextTheme(
+              // 只对这些样式应用自定义字体大小
+              bodyLarge: TextStyle(fontSize: themeProvider.fontSize),
+              bodyMedium: TextStyle(fontSize: themeProvider.fontSize),
+              bodySmall: TextStyle(fontSize: themeProvider.fontSize * 0.85),
+              titleLarge: TextStyle(fontSize: themeProvider.fontSize * 1.5),
+              titleMedium: TextStyle(fontSize: themeProvider.fontSize * 1.25),
+              titleSmall: TextStyle(fontSize: themeProvider.fontSize * 1.1),
+            ).apply(
+              // 设置默认字体大小，不影响已固定大小的文字
+              bodyColor: Colors.black87,
+              displayColor: Colors.black87,
+            ),
+            useMaterial3: true,
+          ),
+          home: const MainPage(),
+        );
+      },
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  final String title;
+class MainPage extends StatefulWidget {
+  const MainPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<MainPage> createState() => _MainPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MainPageState extends State<MainPage> {
   int _currentIndex = 0;
   final List<String> _titles = ['日程表', '任务', '我的'];
   

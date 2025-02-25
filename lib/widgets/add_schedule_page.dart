@@ -28,9 +28,8 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
     if (widget.scheduleItem != null) {
       final item = widget.scheduleItem!;
       _selectedDate = item.date;
-      final times = item.time.split(' - ');
-      _startTime = _parseTimeString(times[0]);
-      _endTime = _parseTimeString(times[1]);
+      _startTime = _parseTimeString(item.startTime);
+      _endTime = _parseTimeString(item.endTime);
       _titleController = TextEditingController(text: item.title);
       _remarkController = TextEditingController(text: item.remark);
       _locationController = TextEditingController(text: item.location);
@@ -103,25 +102,54 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         title,
         style: TextStyle(
           fontSize: 14,
-          color: Colors.grey[600],
+          color: Theme.of(context).colorScheme.primary,
           fontWeight: FontWeight.w500,
         ),
       ),
     );
   }
 
+  // 添加格式化时间的辅助方法
+  String _formatTime(TimeOfDay time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(widget.scheduleItem == null ? '添加日程' : '编辑日程'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          widget.scheduleItem == null ? '添加日程' : '编辑日程',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        iconTheme: IconThemeData(
+          color: Theme.of(context).colorScheme.primary,
+        ),
         actions: [
           TextButton(
             onPressed: () {
-              // TODO: 保存日程
-              Navigator.pop(context);
+              final newSchedule = ScheduleItem(
+                title: _titleController.text,
+                startTime: _formatTime(_startTime),
+                endTime: _formatTime(_endTime),
+                location: _locationController.text,
+                remark: _remarkController.text,
+                date: _selectedDate,
+                isCompleted: widget.scheduleItem?.isCompleted ?? false,
+              );
+              Navigator.pop(context, newSchedule);
             },
-            child: const Text('保存'),
+            child: Text(
+              '保存',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
           ),
         ],
       ),
@@ -138,7 +166,11 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Row(
                   children: [
-                    const Icon(Icons.calendar_today, size: 20),
+                    Icon(
+                      Icons.calendar_today,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       '${_selectedDate.year}年${_selectedDate.month}月${_selectedDate.day}日',
@@ -161,7 +193,11 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Row(
                         children: [
-                          const Icon(Icons.access_time, size: 20),
+                          Icon(
+                            Icons.access_time,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             _startTime.format(context),
@@ -180,7 +216,11 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Row(
                         children: [
-                          const Icon(Icons.access_time, size: 20),
+                          Icon(
+                            Icons.access_time,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             _endTime.format(context),

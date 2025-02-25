@@ -63,7 +63,7 @@ class TaskItemWidget extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            item.time.split(' - ')[0],
+            item.startTime,
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -78,7 +78,7 @@ class TaskItemWidget extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            item.time.split(' - ')[1],
+            item.endTime,
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
