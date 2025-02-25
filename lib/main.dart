@@ -9,11 +9,13 @@ import 'widgets/add_schedule_page.dart';
 // 添加主题状态管理类
 class ThemeProvider with ChangeNotifier {
   static const String _themeColorKey = 'theme_color';
+  static const String _fontSizeKey = 'font_size';  // 添加字体大小的存储键
   static const Color _defaultColor = Color(0xFF90EE90); // 浅绿色
+  static const double _defaultFontSize = 14.0;  // 默认字体大小
 
   SharedPreferences? _prefs;  // 改为可空类型
   Color _primaryColor = _defaultColor;
-  double _fontSize = 16.0;  // 添加字体大小属性
+  double _fontSize = _defaultFontSize;
 
   Color get primaryColor => _primaryColor;
   double get fontSize => _fontSize;
@@ -22,11 +24,19 @@ class ThemeProvider with ChangeNotifier {
   Future<void> init() async {
     try {
       _prefs = await SharedPreferences.getInstance();
+      
       // 从本地存储读取主题色
       final colorValue = _prefs?.getInt(_themeColorKey);
       if (colorValue != null) {
         _primaryColor = Color(colorValue);
       }
+
+      // 从本地存储读取字体大小
+      final fontSize = _prefs?.getDouble(_fontSizeKey);
+      if (fontSize != null) {
+        _fontSize = fontSize;
+      }
+
       notifyListeners();
     } catch (e) {
       debugPrint('初始化主题设置失败: $e');
@@ -42,6 +52,7 @@ class ThemeProvider with ChangeNotifier {
 
   void updateFontSize(double size) {
     _fontSize = size;
+    _prefs?.setDouble(_fontSizeKey, size);  // 保存字体大小到本地
     notifyListeners();
   }
 }

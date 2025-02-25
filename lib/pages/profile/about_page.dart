@@ -1,7 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
+
+  Future<void> _launchUrl(BuildContext context) async {
+    final Uri url = Uri.parse('https://github.com/7788ken/Collaborative-Calendar');
+    try {
+      if (!await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      )) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法打开链接')),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法打开链接')),
+      );
+      debugPrint('打开链接失败: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,10 +115,9 @@ class AboutPage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.code),
             title: const Text('开源项目'),
-            subtitle: const Text('欢迎贡献代码和提出建议'),
-            onTap: () {
-              // TODO: 打开项目地址
-            },
+            subtitle: const Text('查看源代码和贡献指南'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => _launchUrl(context),
           ),
         ],
       ),

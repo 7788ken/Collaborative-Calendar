@@ -23,7 +23,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // 字体大小选项
   final List<double> _fontSizes = [14, 16, 18, 20];
-  double _selectedFontSize = 16;
+  double _selectedFontSize = 14.0;
 
   // 显示颜色选择器对话框
   void _showColorPicker(BuildContext context) {
