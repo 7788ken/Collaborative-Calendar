@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../data/models/schedule_item.dart';
+import '../../../models/schedule_item.dart';
 
 class ScheduleItemWidget extends StatelessWidget {
   final ScheduleItem item;
@@ -10,6 +10,11 @@ class ScheduleItemWidget extends StatelessWidget {
     required this.item,
     required this.onToggleComplete,
   });
+
+  // 格式化时间为小时:分钟格式
+  String _formatTime(DateTime dateTime) {
+    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +46,7 @@ class ScheduleItemWidget extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    item.startTime,
+                    _formatTime(item.startTime),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -53,7 +58,7 @@ class ScheduleItemWidget extends StatelessWidget {
                     color: Colors.grey,
                   ),
                   Text(
-                    item.endTime,
+                    _formatTime(item.endTime),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -70,11 +75,9 @@ class ScheduleItemWidget extends StatelessWidget {
                   children: [
                     Text(
                       item.title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        decoration: item.isCompleted ? TextDecoration.lineThrough : null,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    if (item.location.isNotEmpty) ...[
+                    if (item.location != null && item.location!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
                         '📍 ${item.location}',
@@ -83,10 +86,10 @@ class ScheduleItemWidget extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (item.remark.isNotEmpty) ...[
+                    if (item.description != null && item.description!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        item.remark,
+                        item.description!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.grey[600],
                         ),
@@ -98,8 +101,8 @@ class ScheduleItemWidget extends StatelessWidget {
             ),
             IconButton(
               icon: Icon(
-                item.isCompleted ? Icons.check_circle : Icons.check_circle_outline,
-                color: item.isCompleted ? Colors.green : Colors.grey[400],
+                Icons.more_vert,
+                color: Colors.grey[400],
               ),
               onPressed: onToggleComplete,
             ),

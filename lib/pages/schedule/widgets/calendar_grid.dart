@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
-import '../../../data/models/schedule_item.dart';
+import '../../../models/schedule_item.dart';
 
 class CalendarGrid extends StatelessWidget {
   final DateTime currentMonth;
   final DateTime selectedDay;
-  final Function(DateTime) onDaySelected;
+  final Function(DateTime) onDateSelected;
   final Function(DateTime) onMonthChanged;
-  final Map<DateTime, List<ScheduleItem>> schedules;
+  final Map<DateTime, List<ScheduleItem>> scheduleItemsMap;
+  final int Function(DateTime) getScheduleCountForDate;
 
   const CalendarGrid({
     super.key,
     required this.currentMonth,
     required this.selectedDay,
-    required this.onDaySelected,
+    required this.onDateSelected,
     required this.onMonthChanged,
-    required this.schedules,
+    required this.scheduleItemsMap,
+    required this.getScheduleCountForDate,
   });
 
   @override
@@ -49,7 +51,7 @@ class CalendarGrid extends StatelessWidget {
         DateTime(currentMonth.year, currentMonth.month + 1, i),
       );
     }
-
+    
     return Column(
       children: [
         Padding(
@@ -112,8 +114,11 @@ class CalendarGrid extends StatelessWidget {
               final isSelected = day.year == selectedDay.year &&
                   day.month == selectedDay.month &&
                   day.day == selectedDay.day;
+              final isToday = day.year == DateTime.now().year &&
+                  day.month == DateTime.now().month &&
+                  day.day == DateTime.now().day;
               
-              return _buildDayCell(context, day, isSelected, isCurrentMonth);
+              return _buildDayCell(context, day, isSelected, isCurrentMonth, isToday);
             },
           ),
         ),
@@ -121,17 +126,13 @@ class CalendarGrid extends StatelessWidget {
     );
   }
 
-  Widget _buildDayCell(BuildContext context, DateTime day, bool isSelected, bool isCurrentMonth) {
-    final isToday = day.year == DateTime.now().year &&
-        day.month == DateTime.now().month &&
-        day.day == DateTime.now().day;
-
-    final daySchedules = schedules[day] ?? [];
-    final completedCount = daySchedules.where((item) => item.isCompleted).length;
-    final uncompletedCount = daySchedules.length - completedCount;
-
+  Widget _buildDayCell(BuildContext context, DateTime day, bool isSelected, bool isCurrentMonth, bool isToday) {
+    final daySchedules = scheduleItemsMap[day] ?? [];
+    final completedCount = 0; // 由于新的ScheduleItem模型没有isCompleted属性，这里暂时设为0
+    final uncompletedCount = daySchedules.length;
+    
     return InkWell(
-      onTap: isCurrentMonth ? () => onDaySelected(day) : null,
+      onTap: () => onDateSelected(day),
       child: Container(
         decoration: BoxDecoration(
           color: isToday 
@@ -144,6 +145,14 @@ class CalendarGrid extends StatelessWidget {
             width: 1,
           ) : null,
           borderRadius: BorderRadius.circular(8),
+          boxShadow: isSelected || isToday ? [
+            BoxShadow(
+              color: Colors.black.withAlpha(isToday ? 20 : 15),
+              blurRadius: 4,
+              spreadRadius: 0,
+              offset: const Offset(0, 1),
+            ),
+          ] : null,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -166,7 +175,7 @@ class CalendarGrid extends StatelessWidget {
                   : FontWeight.normal,
               ),
             ),
-            if (daySchedules.isNotEmpty && isCurrentMonth) ...[
+            if (daySchedules.isNotEmpty) ...[
               const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -180,7 +189,9 @@ class CalendarGrid extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: isToday 
                           ? Colors.white.withAlpha(230)
-                          : Colors.green[100],
+                          : !isCurrentMonth 
+                            ? Colors.green[100]?.withAlpha(179)
+                            : Colors.green[100],
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -191,7 +202,9 @@ class CalendarGrid extends StatelessWidget {
                         ).copyWith(
                           color: isToday
                             ? Colors.green[700]
-                            : Colors.green[700],
+                            : !isCurrentMonth
+                              ? Colors.green[700]?.withAlpha(179)
+                              : Colors.green[700],
                         ),
                       ),
                     ),
@@ -206,7 +219,9 @@ class CalendarGrid extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: isToday
                           ? Colors.white.withAlpha(230)
-                          : Colors.red[100],
+                          : !isCurrentMonth
+                            ? Colors.red[100]?.withAlpha(179)
+                            : Colors.red[100],
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -217,7 +232,9 @@ class CalendarGrid extends StatelessWidget {
                         ).copyWith(
                           color: isToday
                             ? Colors.red[700]
-                            : Colors.red[700],
+                            : !isCurrentMonth
+                              ? Colors.red[700]?.withAlpha(179)
+                              : Colors.red[700],
                         ),
                       ),
                     ),
@@ -229,7 +246,7 @@ class CalendarGrid extends StatelessWidget {
       ),
     );
   }
-
+  
   List<DateTime> _getDaysInMonth(DateTime month) {
     final lastDay = DateTime(month.year, month.month + 1, 0);
     return List.generate(
