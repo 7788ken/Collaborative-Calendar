@@ -7,6 +7,7 @@ import 'pages/profile/profile_page.dart';
 import 'widgets/add_schedule_page.dart';
 import 'data/calendar_book_manager.dart';
 import 'data/models/calendar_book.dart';
+import 'data/schedule_data.dart'; // 添加 ScheduleData 导入
 
 // 添加主题状态管理类
 class ThemeProvider with ChangeNotifier {
@@ -68,12 +69,17 @@ void main() async {
 
     final calendarBookManager = CalendarBookManager();
     await calendarBookManager.init(); // 初始化日历本管理器
+    
+    // 初始化 ScheduleData
+    final scheduleData = ScheduleData();
+    await scheduleData.loadTaskCompletionStatus(); // 加载任务完成状态
 
     runApp(
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: themeProvider),
           ChangeNotifierProvider.value(value: calendarBookManager),
+          ChangeNotifierProvider.value(value: scheduleData), // 添加 ScheduleData Provider
         ],
         child: const MyApp(),
       ),
@@ -86,6 +92,7 @@ void main() async {
         providers: [
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
           ChangeNotifierProvider(create: (_) => CalendarBookManager()),
+          ChangeNotifierProvider(create: (_) => ScheduleData()), // 添加 ScheduleData Provider
         ],
         child: const MyApp(),
       ),
@@ -225,12 +232,30 @@ class _MainPageState extends State<MainPage> {
           IconButton(
               icon: const Icon(Icons.add_circle_outline),
               onPressed: () {
-                Navigator.push(
+                Navigator.push( // 添加日程按钮
                   context,
                   MaterialPageRoute(
                     builder: (context) => const AddSchedulePage(),
                   ),
-                );
+                ).then((result) {
+                  // 如果返回结果为true，表示已成功添加或编辑日程，刷新页面
+                  if (result == true) {
+                    print('添加日程返回结果为true，准备刷新页面');
+                    
+                    // 如果当前是日历页面，刷新日历
+                    if (_currentIndex == 0) {
+                      print('刷新日历页面');
+                      SchedulePage.refreshSchedules(context);
+                    }
+                    
+                    // 无论在哪个页面，都刷新任务页面
+                    print('刷新任务页面');
+                    // 添加延迟确保数据库操作完成
+                    Future.delayed(const Duration(milliseconds: 500), () {
+                      TaskPage.refreshTasks(context);
+                    });
+                  }
+                });
               },
             ),
         ],

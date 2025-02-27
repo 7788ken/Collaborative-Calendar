@@ -14,6 +14,19 @@ import 'dart:math' as math;
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
 
+  // 添加刷新方法
+  static void refreshSchedules(BuildContext context) {
+    // 使用Provider.of查找_SchedulePageState并调用刷新方法
+    print('调用刷新日程方法');
+    final state = context.findAncestorStateOfType<_SchedulePageState>();
+    if (state != null) {
+      print('找到SchedulePage状态，刷新日程');
+      state._loadSchedules();
+    } else {
+      print('未找到SchedulePage状态');
+    }
+  }
+
   @override
   State<SchedulePage> createState() => _SchedulePageState();
 }
@@ -117,9 +130,8 @@ class _SchedulePageState extends State<SchedulePage>
 
   // 加载日程数据
   Future<void> _loadSchedules() async {
-    // 如果已经在加载中，避免重复加载
-    // 但初始加载时(_isLoading初始为true)不应该跳过
-    if (_isLoading && _scheduleItems.isNotEmpty) return;
+    // 注释掉这个条件检查，确保每次调用都重新加载数据
+    // if (_isLoading && _scheduleItems.isNotEmpty) return;
 
     if (mounted) {
       setState(() {
@@ -160,12 +172,16 @@ class _SchedulePageState extends State<SchedulePage>
       );
       final endDate = DateTime(_currentMonth.year, _currentMonth.month + 2, 0);
 
+      print('刷新日程: 加载 ${startDate.toString()} 到 ${endDate.toString()} 的数据');
+      
       // 从数据库加载日程数据
       final items = await _scheduleService.getSchedulesInRange(
         activeCalendarId,
         startDate,
         endDate,
       );
+
+      print('刷新日程: 加载了 ${items.length} 条日程数据');
 
       if (mounted) {
         setState(() {
@@ -219,6 +235,24 @@ class _SchedulePageState extends State<SchedulePage>
     return _scheduleItemsMap[dateKey]?.length ?? 0;
   }
 
+  // 获取特定日期的已完成任务数量
+  int _getCompletedScheduleCountForDate(DateTime date) {
+    if (!mounted) return 0;
+    
+    try {
+      // 使用消费者模式而不是直接访问context
+      final scheduleData = Provider.of<ScheduleData>(
+        context, 
+        listen: false
+      );
+      return scheduleData.getCompletedTaskCount(date);
+    } catch (e) {
+      print('获取已完成任务数量出错: $e');
+      // 当遇到错误时返回0，而不是继续抛出异常
+      return 0;
+    }
+  }
+
   // 添加重置面板和日历的方法
   void _resetPanelAndCalendar() {
     if (!mounted) return;
@@ -267,15 +301,32 @@ class _SchedulePageState extends State<SchedulePage>
                     : Stack(
                       children: [
                         // 日历网格
-                        SizedBox(
-                          height: screenHeight,
+                        Expanded(
                           child: CalendarGrid(
                             currentMonth: _currentMonth,
                             selectedDay: _selectedDay,
-                            onDateSelected: _handleDateSelected,
-                            onMonthChanged: _handleMonthChanged,
+                            onDateSelected: (date) {
+                              setState(() {
+                                _selectedDay = date;
+                              });
+                              
+                              // 选择日期后控制面板展开
+                              if (_dragController.isAttached) {
+                                _dragController.animateTo(
+                                  0.6,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              }
+                            },
+                            onMonthChanged: (month) {
+                              setState(() {
+                                _currentMonth = month;
+                              });
+                              _loadSchedules();
+                            },
                             scheduleItemsMap: _scheduleItemsMap,
-                            getScheduleCountForDate: _getScheduleCountForDate,
+                            getScheduleCountForDate: _getCompletedScheduleCountForDate,
                           ),
                         ),
 

@@ -171,27 +171,47 @@ class DatabaseHelper {
     DateTime start,
     DateTime end,
   ) async {
-    final db = await database;
-    final startTime = start.millisecondsSinceEpoch;
-    final endTime = end.millisecondsSinceEpoch;
-    
-    final List<Map<String, dynamic>> maps = await db.query(
-      'schedules',
-      where: 'calendar_id = ? AND end_time >= ? AND start_time <= ?',
-      whereArgs: [calendarId, startTime, endTime],
-    );
-    
-    return List.generate(maps.length, (i) => ScheduleItem.fromMap(maps[i]));
+    try {
+      print('DatabaseHelper: 开始获取日期范围内的日程');
+      final db = await database;
+      final startTime = start.millisecondsSinceEpoch;
+      final endTime = end.millisecondsSinceEpoch;
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'schedules',
+        where: 'calendar_id = ? AND end_time >= ? AND start_time <= ?',
+        whereArgs: [calendarId, startTime, endTime],
+      );
+      
+      print('DatabaseHelper: 查询到 ${maps.length} 条日程记录');
+      
+      final schedules = List.generate(maps.length, (i) => ScheduleItem.fromMap(maps[i]));
+      
+      // 按日期排序
+      schedules.sort((a, b) => a.startTime.compareTo(b.startTime));
+      
+      return schedules;
+    } catch (e) {
+      print('DatabaseHelper: 获取日期范围内的日程时出错: $e');
+      rethrow;
+    }
   }
   
   // 插入日程
   Future<void> insertSchedule(ScheduleItem schedule) async {
-    final db = await database;
-    await db.insert(
-      'schedules',
-      schedule.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      print('数据库助手: 开始插入日程 ${schedule.title}');
+      final db = await database;
+      final result = await db.insert(
+        'schedules',
+        schedule.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('数据库助手: 日程插入成功，结果ID: $result');
+    } catch (e) {
+      print('数据库助手: 插入日程时出错: $e');
+      rethrow; // 重新抛出异常以便上层捕获
+    }
   }
   
   // 更新日程

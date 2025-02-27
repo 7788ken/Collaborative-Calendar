@@ -15,7 +15,11 @@ class ScheduleService {
     DateTime start,
     DateTime end,
   ) async {
-    return await _dbHelper.getSchedulesInRange(calendarId, start, end);
+    print('ScheduleService: 获取日期范围内的日程');
+    print('日历本ID: $calendarId, 开始日期: ${start.toString()}, 结束日期: ${end.toString()}');
+    final results = await _dbHelper.getSchedulesInRange(calendarId, start, end);
+    print('ScheduleService: 获取到 ${results.length} 条日程数据');
+    return results;
   }
 
   // 获取日历本中指定月份的日程
@@ -32,7 +36,14 @@ class ScheduleService {
 
   // 添加日程
   Future<void> addSchedule(ScheduleItem schedule) async {
-    await _dbHelper.insertSchedule(schedule);
+    try {
+      print('ScheduleService: 开始添加日程 ${schedule.title}');
+      await _dbHelper.insertSchedule(schedule);
+      print('ScheduleService: 日程添加成功');
+    } catch (e) {
+      print('ScheduleService: 添加日程时出错: $e');
+      rethrow; // 重新抛出异常以便上层捕获
+    }
   }
 
   // 更新日程

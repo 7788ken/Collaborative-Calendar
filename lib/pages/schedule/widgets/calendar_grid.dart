@@ -128,8 +128,15 @@ class CalendarGrid extends StatelessWidget {
 
   Widget _buildDayCell(BuildContext context, DateTime day, bool isSelected, bool isCurrentMonth, bool isToday) {
     final daySchedules = scheduleItemsMap[day] ?? [];
-    final completedCount = 0; // 由于新的ScheduleItem模型没有isCompleted属性，这里暂时设为0
-    final uncompletedCount = daySchedules.length;
+    
+    // 获取总任务数量
+    final totalCount = daySchedules.length;
+    
+    // 使用回调函数获取已完成的任务数量
+    final completedCount = getScheduleCountForDate(day);
+    
+    // 计算未完成的任务数量
+    final uncompletedCount = totalCount - completedCount;
     
     return InkWell(
       onTap: () => onDateSelected(day),
@@ -175,7 +182,7 @@ class CalendarGrid extends StatelessWidget {
                   : FontWeight.normal,
               ),
             ),
-            if (daySchedules.isNotEmpty) ...[
+            if (totalCount > 0) ...[
               const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
