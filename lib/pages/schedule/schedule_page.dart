@@ -12,6 +12,7 @@ import 'widgets/edit_schedule_sheet.dart';
 import 'dart:math' as math;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import '../../services/task_completion_service.dart';
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
@@ -31,25 +32,21 @@ class SchedulePage extends StatefulWidget {
       return;
     }
     
-    // 备用方法：通过context查找
-    final state = context.findAncestorStateOfType<_SchedulePageState>();
-    if (state != null) {
-      print('找到SchedulePage状态，刷新日程');
-      // 使用Future.microtask确保在当前帧渲染完成后执行刷新
-      Future.microtask(() {
-        state._loadSchedules();
-      });
-    } else {
-      print('未找到SchedulePage状态，尝试使用Provider查找');
-      // 使用Provider尝试刷新所有SchedulePage
-      try {
-        // 使用通知告知所有状态更新
-        final scheduleData = Provider.of<ScheduleData>(context, listen: false);
-        scheduleData.notifyListeners();
-        print('通过Provider通知刷新成功');
-      } catch (e) {
-        print('尝试Provider刷新失败: $e');
+    // 备用方法：使用Provider通知所有监听者
+    try {
+      // 检查context是否仍然有效
+      if (!context.mounted) {
+        print('context已经不再挂载，跳过Provider刷新');
+        return;
       }
+      
+      // 使用Provider尝试刷新所有SchedulePage
+      final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+      scheduleData.notifyListeners();
+      print('通过Provider通知刷新成功');
+    } catch (e) {
+      print('尝试Provider刷新失败: $e');
+      // 错误发生时不做任何操作，避免应用崩溃
     }
   }
 
@@ -679,9 +676,15 @@ class _SchedulePageState extends State<SchedulePage>
   // 确认删除日程
   Future<void> _confirmDeleteSchedule(ScheduleItem schedule) async {
     try {
+      // 获取日历管理器，用于获取分享码
+      final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+      final shareCode = calendarManager.getShareId(schedule.calendarId);
+      
+      // 调用服务删除日程
       final scheduleService = ScheduleService();
       await scheduleService.deleteSchedule(schedule.id);
 
+      // 刷新日程列表
       _loadSchedules();
 
       if (mounted) {
@@ -802,56 +805,19 @@ class _SchedulePageState extends State<SchedulePage>
 
   // 切换任务完成状态
   void _toggleTaskComplete(ScheduleItem schedule) {
-    // 创建一个唯一的任务键
-    final String taskKey = '${schedule.startTime.year}-${schedule.startTime.month}-${schedule.startTime.day}-${schedule.id}';
-    
-    // 获取 ScheduleData Provider
-    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
-    // 获取当前状态
-    final currentStatus = scheduleData.getTaskCompletionStatus(taskKey);
-    // 更新为相反的状态
-    scheduleData.updateTaskCompletionStatus(taskKey, !currentStatus);
-    
-    // 添加振动反馈
-    HapticFeedback.lightImpact();
-    
-    // 更新数据库中的任务完成状态
-    _updateScheduleCompletionInDatabase(schedule, !currentStatus);
-    
-    // 获取日历管理器判断是否需要同步到云端
-    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
-    try {
-      final calendarBook = calendarManager.books.firstWhere(
-        (book) => book.id == schedule.calendarId,
-        orElse: () => throw Exception('找不到日历本'),
-      );
-      
-      // 如果是共享日历，则同步到云端
-      if (calendarBook.isShared) {
-        print('日历页面：检测到共享日历的任务状态变更，准备同步到云端...');
-        Future.microtask(() async {
-          try {
-            // 修改此处，只同步被修改的特定任务，而不是所有任务
-            await calendarManager.syncSharedCalendarSchedules(
-              schedule.calendarId,
-              specificScheduleId: schedule.id
-            );
-            print('日历页面：云端同步完成');
-          } catch (e) {
-            print('日历页面：同步到云端时出错: $e');
-            // 但不显示错误，避免影响用户体验
-          }
-        });
+    // 使用统一的任务完成状态服务
+    TaskCompletionService.toggleTaskCompletion(
+      context, 
+      schedule,
+      onStateChanged: () {
+        // 刷新UI以显示更新后的状态
+        setState(() {});
       }
-    } catch (e) {
-      print('获取日历本信息时出错: $e');
-    }
-    
-    // 刷新UI以显示更新后的状态
-    setState(() {});
+    );
   }
   
   // 新增方法：更新数据库中任务的完成状态
+  // 此方法已移至 TaskCompletionService，保留此方法仅为兼容性考虑
   Future<void> _updateScheduleCompletionInDatabase(ScheduleItem schedule, bool isCompleted) async {
     try {
       // 创建包含新完成状态的日程对象

@@ -9,6 +9,7 @@ import '../../data/calendar_book_manager.dart';
 import '../../widgets/add_schedule_page.dart';
 import '../../pages/schedule/schedule_page.dart';
 import 'widgets/task_item.dart';
+import '../../services/task_completion_service.dart';
 
 class TaskPage extends StatefulWidget {
   const TaskPage({super.key});
@@ -27,22 +28,35 @@ class TaskPage extends StatefulWidget {
       return;
     }
     
+    // 检查context是否仍然有效
+    if (!context.mounted) {
+      print('context已经不再挂载，跳过刷新');
+      return;
+    }
+    
     // 备用方法：通过context查找状态
-    final state = context.findAncestorStateOfType<_TaskPageState>();
-    if (state != null) {
-      print('找到TaskPage状态，刷新任务');
-      // 使用Future.microtask确保在当前帧渲染完成后执行刷新
-      Future.microtask(() {
-        state._loadTasks().then((_) {
-          // 任务刷新完成后，确保日历页面也刷新
-          print('任务刷新完成，再次确保日历页面刷新');
-          Future.delayed(Duration(milliseconds: 50), () {
-            SchedulePage.refreshSchedules(context);
+    try {
+      final state = context.findAncestorStateOfType<_TaskPageState>();
+      if (state != null) {
+        print('找到TaskPage状态，刷新任务');
+        // 使用Future.microtask确保在当前帧渲染完成后执行刷新
+        Future.microtask(() {
+          state._loadTasks().then((_) {
+            // 任务刷新完成后，确保日历页面也刷新
+            print('任务刷新完成，再次确保日历页面刷新');
+            if (context.mounted) {  // 再次检查context是否有效
+              Future.delayed(Duration(milliseconds: 50), () {
+                SchedulePage.refreshSchedules(context);
+              });
+            }
           });
         });
-      });
-    } else {
-      print('未找到TaskPage状态');
+      } else {
+        print('未找到TaskPage状态');
+      }
+    } catch (e) {
+      print('刷新任务时出错: $e');
+      // 错误发生时不做任何操作，避免应用崩溃
     }
   }
 
@@ -313,16 +327,15 @@ class _TaskPageState extends State<TaskPage> {
             onPressed: () async {
               Navigator.of(context).pop();
               
-              // 删除过程中不显示加载状态，避免滚动位置重置
-              // setState(() {
-              //   _isLoading = true;
-              // });
-              
               try {
                 // 生成任务键，用于从状态管理中移除
                 final String taskKey = '${originalItem.startTime.year}-${originalItem.startTime.month}-${originalItem.startTime.day}-${originalItem.id}';
                 
-                // 调用服务删除日程（已在ScheduleService中处理云端同步）
+                // 获取日历管理器，用于获取分享码
+                final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+                final shareCode = calendarManager.getShareId(originalItem.calendarId);
+                
+                // 调用服务删除日程
                 await _scheduleService.deleteSchedule(originalItem.id);
                 
                 if (mounted) {
@@ -349,23 +362,8 @@ class _TaskPageState extends State<TaskPage> {
                   // 立即刷新日历页面
                   SchedulePage.refreshSchedules(context);
                   
-                  // 使用多次延迟刷新确保统计数据更新
-                  // 先短延迟刷新一次
-                  Future.delayed(const Duration(milliseconds: 100), () {
-                    if (mounted) {
-                      SchedulePage.refreshSchedules(context);
-                    }
-                  });
-                  
-                  // 然后中等延迟刷新一次
-                  Future.delayed(const Duration(milliseconds: 200), () {
-                    if (mounted) {
-                      SchedulePage.refreshSchedules(context);
-                    }
-                  });
-                  
-                  // 最后一次较长延迟刷新，确保统计完全更新
-                  Future.delayed(const Duration(milliseconds: 400), () {
+                  // 使用单次延迟刷新确保统计数据更新
+                  Future.delayed(const Duration(milliseconds: 300), () {
                     if (mounted) {
                       SchedulePage.refreshSchedules(context);
                     }
@@ -411,9 +409,6 @@ class _TaskPageState extends State<TaskPage> {
   }
 
   void _toggleComplete(task_models.ScheduleItem taskItem) {
-    // 添加振动反馈
-    HapticFeedback.lightImpact();
-    
     // 保存当前滚动位置
     final double? currentScrollPosition = _scrollController.hasClients ? _scrollController.offset : null;
     
@@ -424,108 +419,60 @@ class _TaskPageState extends State<TaskPage> {
       return;
     }
     
-    // 使用与 schedule_page.dart 一致的方式生成任务键
-    final String taskKey = '${originalItem.startTime.year}-${originalItem.startTime.month}-${originalItem.startTime.day}-${originalItem.id}';
-    
-    // 获取当前状态并切换
-    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
-    final currentStatus = scheduleData.getTaskCompletionStatus(taskKey);
-    final newStatus = !currentStatus;
-    
     // 更新UI状态
     setState(() {
-      taskItem.isCompleted = newStatus;
+      taskItem.isCompleted = !taskItem.isCompleted;
     });
     
-    // 更新Provider中的状态
-    scheduleData.updateTaskCompletionStatus(taskKey, newStatus);
-    
-    // 获取日历管理器判断是否需要同步到云端
-    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
-    final calendarBook = calendarManager.books.firstWhere(
-      (book) => book.id == originalItem.calendarId,
-      orElse: () => throw Exception('找不到日历本'),
-    );
-    
-    // 如果是共享日历，则同步到云端
-    if (calendarBook.isShared) {
-      print('检测到共享日历的任务状态变更，准备同步到云端...');
-      Future.microtask(() async {
-        try {
-          await calendarManager.syncSharedCalendarSchedules(
-            originalItem.calendarId,
-            specificScheduleId: originalItem.id
-          );
-          print('云端同步完成');
-        } catch (e) {
-          print('同步到云端时出错: $e');
-          // 但不显示错误，避免影响用户体验
-        }
-      });
-    }
-    
-    // 立即刷新日历页面
-    SchedulePage.refreshSchedules(context);
-    
-    // 使用多次延迟刷新确保统计数据更新
-    // 先短延迟刷新一次
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
+    // 使用统一的任务完成状态服务
+    TaskCompletionService.toggleTaskCompletion(
+      context, 
+      originalItem,
+      onStateChanged: () {
+        // 立即刷新日历页面
         SchedulePage.refreshSchedules(context);
-      }
-    });
-    
-    // 然后中等延迟刷新一次
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) {
-        SchedulePage.refreshSchedules(context);
-      }
-    });
-    
-    // 适当延迟后刷新当前页面，确保状态更新
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        // 记住当前筛选器状态
-        final FilterStatus currentFilterStatus = _filterStatus;
-        final String currentSearchText = _searchText;
-        final bool currentShowExpired = _showExpired;
         
-        _loadTasks().then((_) {
-          // 恢复筛选器状态
-          setState(() {
-            _filterStatus = currentFilterStatus;
-            _searchText = currentSearchText;
-            _showExpired = currentShowExpired;
-            _searchController.text = currentSearchText;
-            _applyFilters();
-          });
-          
-          // 恢复滚动位置
-          if (currentScrollPosition != null && _scrollController.hasClients) {
-            Future.microtask(() {
-              _scrollController.jumpTo(
-                currentScrollPosition.clamp(
-                  0.0, 
-                  _scrollController.position.maxScrollExtent
-                )
-              );
-            });
+        // 使用单次延迟刷新确保统计数据更新
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            SchedulePage.refreshSchedules(context);
+            
+            // 适当延迟后刷新当前页面，确保状态更新
+            if (mounted) {
+              // 记住当前筛选器状态
+              final FilterStatus currentFilterStatus = _filterStatus;
+              final String currentSearchText = _searchText;
+              final bool currentShowExpired = _showExpired;
+              
+              _loadTasks().then((_) {
+                // 恢复筛选器状态
+                if (mounted) {
+                  setState(() {
+                    _filterStatus = currentFilterStatus;
+                    _searchText = currentSearchText;
+                    _showExpired = currentShowExpired;
+                    _searchController.text = currentSearchText;
+                    _applyFilters();
+                  });
+                  
+                  // 恢复滚动位置
+                  if (currentScrollPosition != null && _scrollController.hasClients) {
+                    Future.microtask(() {
+                      _scrollController.jumpTo(
+                        currentScrollPosition.clamp(
+                          0.0, 
+                          _scrollController.position.maxScrollExtent
+                        )
+                      );
+                    });
+                  }
+                }
+              });
+            }
           }
         });
-        
-        // 再次刷新日历页面，确保数据一致性
-        SchedulePage.refreshSchedules(context);
       }
-    });
-    
-    // 最后一次延迟刷新，确保统计完全更新
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        SchedulePage.refreshSchedules(context);
-      }
-    });
-    
-    print('任务"${taskItem.title}"的完成状态已切换为: $newStatus, 键值: $taskKey');
+    );
   }
   
   // 根据任务项查找对应的原始日程项
@@ -561,56 +508,35 @@ class _TaskPageState extends State<TaskPage> {
         print('编辑任务成功，准备刷新任务列表');
         
         // 先获取ScheduleData以便通知全局更新
+        if (!mounted) return;
         final scheduleData = Provider.of<ScheduleData>(context, listen: false);
         
         // 先强制刷新ScheduleData，通知所有监听者
         scheduleData.forceRefresh();
         
-        // 直接通过全局Key刷新任务页面
-        print('通过GlobalKey强制刷新任务页面');
-        if (TaskPage.globalKey.currentState != null) {
-          TaskPage.globalKey.currentState!.reloadTasks();
-        } else {
-          print('TaskPage全局Key未初始化，尝试其他方式刷新');
-          TaskPage.refreshTasks(context);
-        }
-        
-        // 直接通过全局Key刷新日历页面
-        print('通过GlobalKey强制刷新日历页面');
-        if (SchedulePage.globalKey.currentState != null) {
-          SchedulePage.globalKey.currentState!.reloadSchedules();
-        } else {
-          print('SchedulePage全局Key未初始化，尝试其他方式刷新');
-          SchedulePage.refreshSchedules(context);
-        }
-        
-        // 添加多次延时刷新，确保数据更新到位
-        // 100ms后第一次延时刷新
-        Future.delayed(const Duration(milliseconds: 100), () {
-          print('延时100ms后刷新页面（第2次）');
-          scheduleData.forceRefresh();
-          TaskPage.refreshTasks(context);
-          SchedulePage.refreshSchedules(context);
-        });
-        
-        // 300ms后第二次延时刷新
+        // 使用单次延迟刷新，避免多次不必要的刷新
         Future.delayed(const Duration(milliseconds: 300), () {
-          print('延时300ms后刷新页面（第3次）');
-          TaskPage.refreshTasks(context);
-          SchedulePage.refreshSchedules(context);
+          if (mounted) {
+            // 刷新任务页面
+            if (TaskPage.globalKey.currentState != null) {
+              TaskPage.globalKey.currentState!.reloadTasks();
+            } else {
+              TaskPage.refreshTasks(context);
+            }
+            
+            // 刷新日历页面
+            if (SchedulePage.globalKey.currentState != null) {
+              SchedulePage.globalKey.currentState!.reloadSchedules();
+            } else {
+              SchedulePage.refreshSchedules(context);
+            }
+            
+            // 显示成功提示
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('任务已更新')),
+            );
+          }
         });
-        
-        // 600ms后第三次延时刷新，确保完全更新
-        Future.delayed(const Duration(milliseconds: 600), () {
-          print('延时600ms后刷新页面（第4次）');
-          TaskPage.refreshTasks(context);
-          SchedulePage.refreshSchedules(context);
-        });
-        
-        // 显示成功提示
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('任务已更新')),
-        );
       }
     });
   }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/schedule_item.dart';
 import '../data/calendar_book_manager.dart';
 import '../data/schedule_service.dart';
+import 'package:uuid/uuid.dart';
 
 class AddSchedulePage extends StatefulWidget {
   final ScheduleItem? scheduleItem;
@@ -54,7 +55,7 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       _titleController = TextEditingController(text: item.title);
       _descriptionController = TextEditingController(text: item.description ?? '');
       _locationController = TextEditingController(text: item.location ?? '');
-      _isAllDay = item.isAllDay;
+      _isAllDay = item.isAllDay == 1;
     } else {
       // 新建模式使用默认值
       _selectedDate = DateTime.now();
@@ -122,82 +123,73 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
           (time1.hour == time2.hour && time1.minute >= time2.minute);
   }
 
-  // 保存日程
-  Future<bool> _saveSchedule() async {
-    // 首先进行表单验证
+  Future<bool> _saveToDatabase() async {
     if (!_formKey.currentState!.validate()) {
       return false;
     }
-    
-    try {
-      setState(() {
-        _isSaving = true;
-      });
 
-      // 获取当前活跃的日历本ID
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      // 获取日历管理器
       final calendarManager = Provider.of<CalendarBookManager>(
         context, 
         listen: false
       );
-      final activeCalendarId = calendarManager.activeBook?.id;
       
-      // 添加调试输出
-      print('活跃日历本ID: $activeCalendarId');
-      
-      if (activeCalendarId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('未找到活跃的日历本')),
-        );
-        setState(() {
-          _isSaving = false;
-        });
-        return false;
-      }
-
-      // 创建开始时间和结束时间的DateTime对象
-      final startDateTime = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _isAllDay ? 0 : _startTime.hour,
-        _isAllDay ? 0 : _startTime.minute,
-      );
-      
-      final endDateTime = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _isAllDay ? 23 : _endTime.hour,
-        _isAllDay ? 59 : _endTime.minute,
-      );
-      
-      // 添加调试输出
-      print('开始时间: $startDateTime');
-      print('结束时间: $endDateTime');
-      
-      // 创建新的日程项
-      final ScheduleItem newSchedule = widget.scheduleItem == null
+      // 创建日程项
+      final newSchedule = widget.scheduleItem == null
           ? ScheduleItem(
-              calendarId: activeCalendarId,
+              id: Uuid().v4(),
+              calendarId: calendarManager.activeBook!.id,
               title: _titleController.text.trim(),
-              description: _descriptionController.text.trim(),
-              startTime: startDateTime,
-              endTime: endDateTime,
+              startTime: DateTime(
+                _selectedDate.year,
+                _selectedDate.month,
+                _selectedDate.day,
+                _startTime.hour,
+                _startTime.minute,
+              ),
+              endTime: DateTime(
+                _selectedDate.year,
+                _selectedDate.month,
+                _selectedDate.day,
+                _endTime.hour,
+                _endTime.minute,
+              ),
               isAllDay: _isAllDay,
-              location: _locationController.text.trim().isEmpty 
-                ? null 
-                : _locationController.text.trim(),
+              description: _descriptionController.text.isEmpty
+                  ? null
+                  : _descriptionController.text.trim(),
+              location: _locationController.text.isEmpty
+                  ? null
+                  : _locationController.text.trim(),
             )
           : widget.scheduleItem!.copyWith(
-              calendarId: activeCalendarId,
               title: _titleController.text.trim(),
-              description: _descriptionController.text.trim(),
-              startTime: startDateTime,
-              endTime: endDateTime,
+              startTime: DateTime(
+                _selectedDate.year,
+                _selectedDate.month,
+                _selectedDate.day,
+                _startTime.hour,
+                _startTime.minute,
+              ),
+              endTime: DateTime(
+                _selectedDate.year,
+                _selectedDate.month,
+                _selectedDate.day,
+                _endTime.hour,
+                _endTime.minute,
+              ),
               isAllDay: _isAllDay,
-              location: _locationController.text.trim().isEmpty 
-                ? null 
-                : _locationController.text.trim(),
+              description: _descriptionController.text.isEmpty
+                  ? null
+                  : _descriptionController.text.trim(),
+              location: _locationController.text.isEmpty
+                  ? null
+                  : _locationController.text.trim(),
             );
       
       // 添加调试输出
@@ -274,9 +266,11 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         print('获取日历本信息时出错: $e');
       }
       
-      print('导航返回上一页，结果为true');
+      print('添加日程返回结果为true，准备刷新页面');
       // 返回上一页，并传递保存成功的标志
       if (mounted) {
+        // 使用单一的true值作为结果，让调用方知道操作成功
+        // 但不在这里直接触发多次刷新
         Navigator.pop(context, true);
       }
       return true;
@@ -340,7 +334,7 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
                 ),
               )
             : TextButton(
-                onPressed: _saveSchedule,
+                onPressed: _saveToDatabase,
                 child: Text(
                   '保存',
                   style: TextStyle(

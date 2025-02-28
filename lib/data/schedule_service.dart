@@ -56,11 +56,47 @@ class ScheduleService {
   Future<void> updateSchedule(ScheduleItem schedule) async {
     try {
       print('ScheduleService: 开始更新日程 ${schedule.title}，ID: ${schedule.id}');
-      await _dbHelper.updateSchedule(schedule);
-      print('ScheduleService: 日程更新成功');
       
-      // 检查是否为共享日历，同步到云端
-      await _syncToCloudIfNeeded(schedule.calendarId);
+      // 执行本地更新操作
+      await _dbHelper.updateSchedule(schedule);
+      print('ScheduleService: 日程本地更新成功');
+      
+      // 检查是否为共享日历，如果是则直接使用API更新到云端
+      try {
+        // 确保CalendarBookManager已初始化
+        if (!_calendarManager.books.any((book) => book.id == schedule.calendarId)) {
+          await _calendarManager.init();
+        }
+        
+        // 获取日历信息
+        final calendarBook = _calendarManager.books.firstWhere(
+          (book) => book.id == schedule.calendarId,
+          orElse: () => throw Exception('未找到ID为 ${schedule.calendarId} 的日历本'),
+        );
+        
+        // 如果是共享日历，则使用API直接更新到云端
+        if (calendarBook.isShared) {
+          print('ScheduleService: 检测到共享日历更新操作，正在同步到云端...');
+          
+          // 获取分享码
+          final shareCode = _calendarManager.getShareId(schedule.calendarId);
+          if (shareCode == null) {
+            throw Exception('未找到日历本的分享码');
+          }
+          
+          // 使用正确的API接口更新日程
+          print('ScheduleService: 使用API接口更新日程，shareCode=$shareCode, scheduleId=${schedule.id}');
+          final apiService = ApiService();
+          await apiService.updateSchedule(shareCode, schedule.id, schedule);
+          
+          print('ScheduleService: 云端更新同步完成');
+        } else {
+          print('ScheduleService: 本地日历，无需同步');
+        }
+      } catch (e) {
+        print('ScheduleService: 同步更新操作到云端时出错: $e');
+        // 仅记录错误但不抛出，避免影响主流程
+      }
     } catch (e) {
       print('ScheduleService: 更新日程时出错: $e');
       rethrow; // 重新抛出异常以便上层捕获
@@ -80,14 +116,11 @@ class ScheduleService {
       final schedule = schedules.first;
       final calendarId = schedule.calendarId;
       
-      // 保存一份删除前的日程信息，用于同步到云端
-      final ScheduleItem scheduleToDelete = schedule;
-      
       // 执行本地删除操作
       await _dbHelper.deleteSchedule(id);
       print('ScheduleService: 日程(ID:$id)本地删除成功');
       
-      // 检查是否为共享日历，如果是则直接同步特定日程到云端
+      // 检查是否为共享日历，如果是则同步删除到云端
       try {
         // 确保CalendarBookManager已初始化
         if (!_calendarManager.books.any((book) => book.id == calendarId)) {
@@ -103,7 +136,6 @@ class ScheduleService {
         // 如果是共享日历，则同步删除操作到云端
         if (calendarBook.isShared) {
           print('ScheduleService: 检测到共享日历删除操作，正在同步到云端...');
-          print('ScheduleService: 同步单条日程删除，ID: $id');
           
           // 获取分享码
           final shareCode = _calendarManager.getShareId(calendarId);
@@ -111,13 +143,10 @@ class ScheduleService {
             throw Exception('未找到日历本的分享码');
           }
           
-          // 方法1: 调用API进行软删除 - 通过DELETE请求
+          // 使用正确的API接口删除日程
+          print('ScheduleService: 使用API接口删除日程，shareCode=$shareCode, scheduleId=$id');
           final apiService = ApiService();
           await apiService.deleteSchedule(shareCode, id);
-          
-          // 方法2: 通过批量同步API发送删除标记，双重确保服务器端标记为已删除
-          print('ScheduleService: 通过批量同步API再次确认删除状态');
-          await _calendarManager.syncSharedCalendarSchedules(calendarId, specificScheduleId: id);
           
           print('ScheduleService: 云端删除同步完成');
         } else {

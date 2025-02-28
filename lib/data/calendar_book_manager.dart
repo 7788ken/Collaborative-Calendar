@@ -614,25 +614,10 @@ class CalendarBookManager with ChangeNotifier {
       // 获取日程数据
       final schedules = await _dbHelper.getScheduleById(scheduleId);
       if (schedules.isEmpty) {
-        // 如果本地找不到该日程，可能是已被删除，发送删除标记
-        print('CalendarBookManager: 本地未找到日程，可能已被删除，发送删除标记');
-        
-        // 服务器要求提供必要字段，添加必要的字段以通过验证
-        final deleteData = {
-          'id': scheduleId,
-          'title': '(已删除)',  // 服务器要求title字段不能为null
-          'startTime': DateTime.now().millisecondsSinceEpoch,
-          'endTime': DateTime.now().add(Duration(hours: 1)).millisecondsSinceEpoch,
-          'isAllDay': 0,
-          'is_deleted': 1 // 标记为已删除
-        };
-        
-        print('CalendarBookManager: 准备发送的删除数据: $deleteData');
-        
-        // 使用API同步删除标记
-        final apiService = ApiService();
-        await apiService.syncSchedules(shareCode, [deleteData]);
-        print('CalendarBookManager: 日程删除标记同步成功');
+        // 如果本地找不到该日程，可能是已被删除，但我们现在使用专门的API删除日程
+        // 所以这里不再需要发送删除标记
+        print('CalendarBookManager: 本地未找到日程，可能已被删除');
+        print('CalendarBookManager: 跳过同步，因为删除操作应该已经通过专门的API完成');
         return;
       }
       

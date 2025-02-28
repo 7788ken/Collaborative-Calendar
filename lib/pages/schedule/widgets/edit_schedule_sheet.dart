@@ -268,36 +268,6 @@ class _EditScheduleSheetState extends State<EditScheduleSheet> {
       // 回调通知父组件
       widget.onScheduleUpdated(schedule);
       
-      // 判断是否需要同步到云端
-      final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
-      try {
-        final calendarBook = calendarManager.books.firstWhere(
-          (book) => book.id == schedule.calendarId,
-          orElse: () => throw Exception('找不到日历本'),
-        );
-        
-        // 如果是共享日历，则同步到云端 - 只同步当前编辑的日程
-        if (calendarBook.isShared) {
-          print('编辑日程：检测到共享日历的日程变更，准备同步到云端...');
-          print('同步单条日程，ID: ${schedule.id}');
-          Future.microtask(() async {
-            try {
-              // 只同步特定的日程ID，而不是整个日历的所有日程
-              await calendarManager.syncSharedCalendarSchedules(
-                schedule.calendarId,
-                specificScheduleId: schedule.id
-              );
-              print('编辑日程：云端同步完成');
-            } catch (e) {
-              print('编辑日程：同步到云端时出错: $e');
-              // 但不显示错误，避免影响用户体验
-            }
-          });
-        }
-      } catch (e) {
-        print('获取日历本信息时出错: $e');
-      }
-      
       // 关闭底部表单
       if (mounted) {
         Navigator.pop(context);

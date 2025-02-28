@@ -138,13 +138,36 @@ class ApiService {
   
   // 更新日程
   Future<void> updateSchedule(String shareCode, String scheduleId, ScheduleItem schedule) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/api/calendars/$shareCode/schedules/$scheduleId'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode(schedule.toMap()),
-    );
-    
-    await _handleResponse(response);
+    try {
+      print('ApiService: 开始更新日程，shareCode=$shareCode, scheduleId=$scheduleId');
+      
+      // 准备请求数据，确保字段名称和格式与API期望的一致
+      final Map<String, dynamic> scheduleData = {
+        'id': schedule.id,
+        'title': schedule.title,
+        'description': schedule.description,
+        'location': schedule.location,
+        'startTime': schedule.startTime.millisecondsSinceEpoch,
+        'endTime': schedule.endTime.millisecondsSinceEpoch,
+        'isAllDay': schedule.isAllDay ? 1 : 0,
+        'isCompleted': schedule.isCompleted ? 1 : 0
+      };
+      
+      print('ApiService: 准备发送的数据: $scheduleData');
+      
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/calendars/$shareCode/schedules/$scheduleId'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(scheduleData),
+      );
+      
+      print('ApiService: 更新请求响应状态: ${response.statusCode}');
+      await _handleResponse(response);
+      print('ApiService: 更新请求完成');
+    } catch (e) {
+      print('ApiService: 更新日程时出错: $e');
+      rethrow;
+    }
   }
   
   // 删除日程

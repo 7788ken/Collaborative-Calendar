@@ -254,10 +254,8 @@ class _AddScheduleSheetState extends State<AddScheduleSheet> {
       final scheduleService = ScheduleService();
       await scheduleService.addSchedule(schedule);
       
-      // 回调通知父组件
-      widget.onScheduleAdded(schedule);
-      
       // 判断是否需要同步到云端
+      if (!mounted) return;
       final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
       try {
         final calendarBook = calendarManager.books.firstWhere(
@@ -269,19 +267,18 @@ class _AddScheduleSheetState extends State<AddScheduleSheet> {
         if (calendarBook.isShared) {
           print('新增日程：检测到共享日历的日程变更，准备同步到云端...');
           print('同步单条日程，ID: ${schedule.id}');
-          Future.microtask(() async {
-            try {
-              // 只同步特定的日程ID，而不是整个日历的所有日程
-              await calendarManager.syncSharedCalendarSchedules(
-                schedule.calendarId,
-                specificScheduleId: schedule.id
-              );
-              print('新增日程：云端同步完成');
-            } catch (e) {
-              print('新增日程：同步到云端时出错: $e');
-              // 但不显示错误，避免影响用户体验
-            }
-          });
+          
+          try {
+            // 只同步特定的日程ID，而不是整个日历的所有日程
+            await calendarManager.syncSharedCalendarSchedules(
+              schedule.calendarId,
+              specificScheduleId: schedule.id
+            );
+            print('新增日程：云端同步完成');
+          } catch (e) {
+            print('新增日程：同步到云端时出错: $e');
+            // 但不显示错误，避免影响用户体验
+          }
         }
       } catch (e) {
         print('获取日历本信息时出错: $e');
@@ -290,6 +287,11 @@ class _AddScheduleSheetState extends State<AddScheduleSheet> {
       // 关闭底部表单
       if (mounted) {
         Navigator.pop(context);
+        
+        // 使用回调通知父组件刷新，而不是直接在这里刷新
+        // 这样可以避免多次刷新调用
+        widget.onScheduleAdded(schedule);
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('日程已添加')),
         );
