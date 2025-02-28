@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 import '../../data/schedule_data.dart';
 import '../../data/models/schedule_item.dart' as task_models;
 import '../../models/schedule_item.dart';
@@ -12,13 +13,34 @@ import 'widgets/task_item.dart';
 class TaskPage extends StatefulWidget {
   const TaskPage({super.key});
 
+  // 添加全局Key以便在任何地方刷新
+  static final GlobalKey<_TaskPageState> globalKey = GlobalKey<_TaskPageState>();
+
   // 添加刷新方法
   static void refreshTasks(BuildContext context) {
     print('调用刷新任务方法');
+    
+    // 优先通过全局Key刷新
+    if (globalKey.currentState != null) {
+      print('通过GlobalKey找到TaskPage状态，强制刷新任务');
+      globalKey.currentState!.reloadTasks();
+      return;
+    }
+    
+    // 备用方法：通过context查找状态
     final state = context.findAncestorStateOfType<_TaskPageState>();
     if (state != null) {
       print('找到TaskPage状态，刷新任务');
-      state._loadTasks();
+      // 使用Future.microtask确保在当前帧渲染完成后执行刷新
+      Future.microtask(() {
+        state._loadTasks().then((_) {
+          // 任务刷新完成后，确保日历页面也刷新
+          print('任务刷新完成，再次确保日历页面刷新');
+          Future.delayed(Duration(milliseconds: 50), () {
+            SchedulePage.refreshSchedules(context);
+          });
+        });
+      });
     } else {
       print('未找到TaskPage状态');
     }
@@ -31,16 +53,99 @@ class TaskPage extends StatefulWidget {
 class _TaskPageState extends State<TaskPage> {
   // 使用真实数据库的日程项列表
   List<ScheduleItem> _scheduleItems = [];
+  List<ScheduleItem> _filteredItems = []; // 过滤后的任务列表
   bool _isLoading = true;
   String? _currentCalendarId;
   
+  // 添加ScrollController来控制列表滚动位置
+  final ScrollController _scrollController = ScrollController();
+  
+  // 搜索和筛选状态
+  final TextEditingController _searchController = TextEditingController();
+  String _searchText = '';
+  FilterStatus _filterStatus = FilterStatus.all;
+  bool _showExpired = false; // 是否显示过期任务，默认不筛选
+  
   // 日程服务
   final ScheduleService _scheduleService = ScheduleService();
+  
+  // 暴露给GlobalKey使用的公开方法
+  void reloadTasks() {
+    _loadTasks();
+  }
 
   @override
   void initState() {
     super.initState();
+    // 添加搜索文本监听
+    _searchController.addListener(_onSearchChanged);
     _loadTasks();
+  }
+  
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    _scrollController.dispose(); // 释放ScrollController
+    super.dispose();
+  }
+  
+  // 搜索文本变化
+  void _onSearchChanged() {
+    setState(() {
+      _searchText = _searchController.text;
+      _applyFilters();
+    });
+  }
+  
+  // 应用筛选条件
+  void _applyFilters() {
+    if (_scheduleItems.isEmpty) {
+      _filteredItems = [];
+      return;
+    }
+    
+    // 根据搜索文本和筛选状态过滤
+    _filteredItems = _scheduleItems.where((item) {
+      // 获取任务完成状态
+      final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+      final taskKey = '${item.startTime.year}-${item.startTime.month}-${item.startTime.day}-${item.id}';
+      final isCompleted = scheduleData.getTaskCompletionStatus(taskKey);
+      
+      // 是否过期
+      final date = DateTime(item.startTime.year, item.startTime.month, item.startTime.day);
+      final isExpired = _isPast(date) && !_isToday(date);
+      
+      // 按过期状态筛选
+      if (_filterStatus == FilterStatus.expired && !isExpired) {
+        return false;
+      }
+      
+      // 按完成状态筛选
+      if (_filterStatus == FilterStatus.completed && !isCompleted) {
+        return false;
+      }
+      if (_filterStatus == FilterStatus.uncompleted && isCompleted) {
+        return false;
+      }
+      
+      // 根据_showExpired筛选过期任务
+      if (!_showExpired && isExpired && _filterStatus != FilterStatus.expired) {
+        return false;
+      }
+      
+      // 关键字搜索
+      if (_searchText.isNotEmpty) {
+        final searchLower = _searchText.toLowerCase();
+        final titleMatch = item.title.toLowerCase().contains(searchLower);
+        final locationMatch = (item.location ?? '').toLowerCase().contains(searchLower);
+        final descMatch = (item.description ?? '').toLowerCase().contains(searchLower);
+        
+        return titleMatch || locationMatch || descMatch;
+      }
+      
+      return true;
+    }).toList();
   }
   
   @override
@@ -83,18 +188,21 @@ class _TaskPageState extends State<TaskPage> {
       if (activeCalendarId == null) {
         setState(() {
           _scheduleItems = [];
+          _filteredItems = [];
           _isLoading = false;
         });
         return;
       }
       
-      // 获取当前日历的所有日程
-      final now = DateTime.now();
-      // 获取从现在开始的未来日程
+      // 获取所有日程，不限制时间范围
+      // 使用一个较早的过去日期和较远的未来日期以包含所有日程
+      final pastDate = DateTime(2000, 1, 1); // 过去的日期
+      final futureDate = DateTime.now().add(const Duration(days: 3650)); // 未来10年
+      
       final items = await _scheduleService.getSchedulesInRange(
         activeCalendarId,
-        now, 
-        now.add(const Duration(days: 365)), // 获取未来一年的日程
+        pastDate, 
+        futureDate,
       );
       
       print('任务页面: 加载了 ${items.length} 条日程数据');
@@ -104,6 +212,7 @@ class _TaskPageState extends State<TaskPage> {
           _scheduleItems = items;
           _isLoading = false;
           _currentCalendarId = activeCalendarId;
+          _applyFilters(); // 应用过滤
         });
       }
     } catch (e) {
@@ -111,6 +220,7 @@ class _TaskPageState extends State<TaskPage> {
       if (mounted) {
         setState(() {
           _scheduleItems = [];
+          _filteredItems = [];
           _isLoading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -122,6 +232,18 @@ class _TaskPageState extends State<TaskPage> {
 
   // 将日历日程项转换为任务日程项，用于显示
   task_models.ScheduleItem _convertToTaskItem(ScheduleItem item) {
+    // 获取任务完成状态
+    final scheduleData = Provider.of<ScheduleData>(
+      context, 
+      listen: false
+    );
+    
+    // 使用与其他地方一致的方式生成任务键
+    final String taskKey = '${item.startTime.year}-${item.startTime.month}-${item.startTime.day}-${item.id}';
+    
+    // 获取已保存的完成状态
+    final isCompleted = scheduleData.getTaskCompletionStatus(taskKey);
+    
     return task_models.ScheduleItem(
       title: item.title,
       startTime: '${item.startTime.hour.toString().padLeft(2, '0')}:${item.startTime.minute.toString().padLeft(2, '0')}',
@@ -129,7 +251,7 @@ class _TaskPageState extends State<TaskPage> {
       location: item.location ?? '',
       remark: item.description ?? '',
       date: DateTime(item.startTime.year, item.startTime.month, item.startTime.day),
-      isCompleted: false, // 默认未完成
+      isCompleted: isCompleted, // 使用已保存的完成状态
     );
   }
 
@@ -180,6 +302,9 @@ class _TaskPageState extends State<TaskPage> {
       return;
     }
     
+    // 保存当前滚动位置
+    final double? currentScrollPosition = _scrollController.hasClients ? _scrollController.offset : null;
+    
     // 显示确认对话框
     showDialog(
       context: context,
@@ -195,23 +320,81 @@ class _TaskPageState extends State<TaskPage> {
             onPressed: () async {
               Navigator.of(context).pop();
               
-              setState(() {
-                _isLoading = true;
-              });
+              // 删除过程中不显示加载状态，避免滚动位置重置
+              // setState(() {
+              //   _isLoading = true;
+              // });
               
               try {
+                // 生成任务键，用于从状态管理中移除
+                final String taskKey = '${originalItem.startTime.year}-${originalItem.startTime.month}-${originalItem.startTime.day}-${originalItem.id}';
+                
                 // 调用服务删除日程
                 await _scheduleService.deleteSchedule(originalItem.id);
                 
                 if (mounted) {
+                  // 获取ScheduleData实例
+                  final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+                  
+                  // 如果任务有完成状态记录，更新状态（设为false或移除）
+                  if (scheduleData.getTaskCompletionStatus(taskKey)) {
+                    // 添加振动反馈
+                    HapticFeedback.lightImpact();
+                    
+                    // 将任务状态从系统中移除
+                    scheduleData.removeTaskCompletionStatus(taskKey);
+                  }
+                  
                   setState(() {
+                    // 从主列表中移除
                     _scheduleItems.remove(originalItem);
-                    _isLoading = false;
+                    
+                    // 重新应用过滤器，而不是直接修改_filteredItems
+                    _applyFilters();
+                  });
+                  
+                  // 立即刷新日历页面
+                  SchedulePage.refreshSchedules(context);
+                  
+                  // 使用多次延迟刷新确保统计数据更新
+                  // 先短延迟刷新一次
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted) {
+                      SchedulePage.refreshSchedules(context);
+                    }
+                  });
+                  
+                  // 然后中等延迟刷新一次
+                  Future.delayed(const Duration(milliseconds: 200), () {
+                    if (mounted) {
+                      SchedulePage.refreshSchedules(context);
+                    }
+                  });
+                  
+                  // 最后一次较长延迟刷新，确保统计完全更新
+                  Future.delayed(const Duration(milliseconds: 400), () {
+                    if (mounted) {
+                      SchedulePage.refreshSchedules(context);
+                    }
                   });
                   
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('日程已删除')),
                   );
+                  
+                  print('任务"${taskItem.title}"已删除，键值: $taskKey');
+                  
+                  // 恢复滚动位置
+                  if (currentScrollPosition != null && _scrollController.hasClients) {
+                    Future.microtask(() {
+                      _scrollController.jumpTo(
+                        currentScrollPosition.clamp(
+                          0.0, 
+                          _scrollController.position.maxScrollExtent
+                        )
+                      );
+                    });
+                  }
                 }
               } catch (e) {
                 print('删除日程失败: $e');
@@ -235,22 +418,116 @@ class _TaskPageState extends State<TaskPage> {
   }
 
   void _toggleComplete(task_models.ScheduleItem taskItem) {
+    // 添加振动反馈
+    HapticFeedback.lightImpact();
+    
+    // 保存当前滚动位置
+    final double? currentScrollPosition = _scrollController.hasClients ? _scrollController.offset : null;
+    
+    // 找到对应的原始日程项，获取 ID
+    final originalItem = _findOriginalScheduleItem(taskItem);
+    if (originalItem == null) {
+      print('找不到对应的原始日程项，无法更新完成状态');
+      return;
+    }
+    
+    // 使用与 schedule_page.dart 一致的方式生成任务键
+    final String taskKey = '${originalItem.startTime.year}-${originalItem.startTime.month}-${originalItem.startTime.day}-${originalItem.id}';
+    
+    // 获取当前状态并切换
+    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+    final currentStatus = scheduleData.getTaskCompletionStatus(taskKey);
+    final newStatus = !currentStatus;
+    
     // 更新UI状态
     setState(() {
-      taskItem.isCompleted = !taskItem.isCompleted;
+      taskItem.isCompleted = newStatus;
     });
     
-    // 把状态变更持久化到本地存储
-    // 这里可以使用SharedPreferences或其他本地存储方式
-    // 创建一个唯一标识符，基于日期和任务标题
-    final String taskKey = '${taskItem.date.year}-${taskItem.date.month}-${taskItem.date.day}-${taskItem.title}';
+    // 更新Provider中的状态
+    scheduleData.updateTaskCompletionStatus(taskKey, newStatus);
     
-    // 使用Provider存储状态
-    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
-    scheduleData.updateTaskCompletionStatus(taskKey, taskItem.isCompleted);
-    
-    // 刷新日历页面，以显示更新后的统计数据
+    // 立即刷新日历页面
     SchedulePage.refreshSchedules(context);
+    
+    // 使用多次延迟刷新确保统计数据更新
+    // 先短延迟刷新一次
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        SchedulePage.refreshSchedules(context);
+      }
+    });
+    
+    // 然后中等延迟刷新一次
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (mounted) {
+        SchedulePage.refreshSchedules(context);
+      }
+    });
+    
+    // 适当延迟后刷新当前页面，确保状态更新
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        // 记住当前筛选器状态
+        final FilterStatus currentFilterStatus = _filterStatus;
+        final String currentSearchText = _searchText;
+        final bool currentShowExpired = _showExpired;
+        
+        _loadTasks().then((_) {
+          // 恢复筛选器状态
+          setState(() {
+            _filterStatus = currentFilterStatus;
+            _searchText = currentSearchText;
+            _showExpired = currentShowExpired;
+            _searchController.text = currentSearchText;
+            _applyFilters();
+          });
+          
+          // 恢复滚动位置
+          if (currentScrollPosition != null && _scrollController.hasClients) {
+            Future.microtask(() {
+              _scrollController.jumpTo(
+                currentScrollPosition.clamp(
+                  0.0, 
+                  _scrollController.position.maxScrollExtent
+                )
+              );
+            });
+          }
+        });
+        
+        // 再次刷新日历页面，确保数据一致性
+        SchedulePage.refreshSchedules(context);
+      }
+    });
+    
+    // 最后一次延迟刷新，确保统计完全更新
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        SchedulePage.refreshSchedules(context);
+      }
+    });
+    
+    print('任务"${taskItem.title}"的完成状态已切换为: $newStatus, 键值: $taskKey');
+  }
+  
+  // 根据任务项查找对应的原始日程项
+  ScheduleItem? _findOriginalScheduleItem(task_models.ScheduleItem taskItem) {
+    try {
+      return _scheduleItems.firstWhere(
+        (item) => 
+          item.title == taskItem.title && 
+          DateTime(
+            item.startTime.year, 
+            item.startTime.month, 
+            item.startTime.day
+          ) == taskItem.date &&
+          '${item.startTime.hour.toString().padLeft(2, '0')}:${item.startTime.minute.toString().padLeft(2, '0')}' == taskItem.startTime
+      );
+    } catch (e) {
+      print('查找原始日程项出错: $e');
+      return null;
+    }
   }
   
   // 编辑日程
@@ -264,7 +541,59 @@ class _TaskPageState extends State<TaskPage> {
     ).then((result) {
       // 如果编辑成功，刷新任务列表
       if (result == true) {
-        _loadTasks();
+        print('编辑任务成功，准备刷新任务列表');
+        
+        // 先获取ScheduleData以便通知全局更新
+        final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+        
+        // 先强制刷新ScheduleData，通知所有监听者
+        scheduleData.forceRefresh();
+        
+        // 直接通过全局Key刷新任务页面
+        print('通过GlobalKey强制刷新任务页面');
+        if (TaskPage.globalKey.currentState != null) {
+          TaskPage.globalKey.currentState!.reloadTasks();
+        } else {
+          print('TaskPage全局Key未初始化，尝试其他方式刷新');
+          TaskPage.refreshTasks(context);
+        }
+        
+        // 直接通过全局Key刷新日历页面
+        print('通过GlobalKey强制刷新日历页面');
+        if (SchedulePage.globalKey.currentState != null) {
+          SchedulePage.globalKey.currentState!.reloadSchedules();
+        } else {
+          print('SchedulePage全局Key未初始化，尝试其他方式刷新');
+          SchedulePage.refreshSchedules(context);
+        }
+        
+        // 添加多次延时刷新，确保数据更新到位
+        // 100ms后第一次延时刷新
+        Future.delayed(const Duration(milliseconds: 100), () {
+          print('延时100ms后刷新页面（第2次）');
+          scheduleData.forceRefresh();
+          TaskPage.refreshTasks(context);
+          SchedulePage.refreshSchedules(context);
+        });
+        
+        // 300ms后第二次延时刷新
+        Future.delayed(const Duration(milliseconds: 300), () {
+          print('延时300ms后刷新页面（第3次）');
+          TaskPage.refreshTasks(context);
+          SchedulePage.refreshSchedules(context);
+        });
+        
+        // 600ms后第三次延时刷新，确保完全更新
+        Future.delayed(const Duration(milliseconds: 600), () {
+          print('延时600ms后刷新页面（第4次）');
+          TaskPage.refreshTasks(context);
+          SchedulePage.refreshSchedules(context);
+        });
+        
+        // 显示成功提示
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('任务已更新')),
+        );
       }
     });
   }
@@ -288,100 +617,326 @@ class _TaskPageState extends State<TaskPage> {
           return const Center(child: CircularProgressIndicator());
         }
         
-        final groupedSchedules = _groupSchedulesByDate(_scheduleItems);
+        // 使用过滤后的任务列表
+        final groupedSchedules = _groupSchedulesByDate(_filteredItems);
 
-        if (groupedSchedules.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.event_note,
-                  size: 64,
-                  color: Colors.grey[300],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '暂无日程',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '点击顶部"+"按钮添加新日程',
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          onRefresh: _loadTasks,
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: groupedSchedules.length,
-            itemBuilder: (context, index) {
-              final date = groupedSchedules.keys.elementAt(index);
-              final schedules = groupedSchedules[date]!;
-              
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return Column(
+          children: [
+            // 搜索和筛选区域
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.white,
+              child: Column(
                 children: [
-                  // 日期标题
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Text(
-                            '${date.month}月${date.day}日',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _getWeekday(date.weekday),
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
+                  // 搜索框
+                  TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: '搜索任务...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      filled: true,
+                      fillColor: Colors.grey[100],
                     ),
                   ),
-                  // 日程列表
-                  ...schedules.map((item) => TaskItemWidget(
-                    item: item,
-                    onToggleComplete: () => _toggleComplete(item),
-                    onDelete: () => _deleteSchedule(item),
-                    onEdit: (scheduleItem) => _editSchedule(scheduleItem),
-                  )).toList(),
-                  // 分隔线
-                  if (index < groupedSchedules.length - 1)
-                    const Divider(height: 32),
+                  const SizedBox(height: 8),
+                  // 筛选按钮
+                  Row(
+                    children: [
+                      _buildFilterChip(
+                        label: '全部',
+                        selected: _filterStatus == FilterStatus.all,
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _filterStatus = FilterStatus.all;
+                              _applyFilters();
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        label: '已完成',
+                        selected: _filterStatus == FilterStatus.completed,
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _filterStatus = FilterStatus.completed;
+                              _applyFilters();
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        label: '未完成',
+                        selected: _filterStatus == FilterStatus.uncompleted,
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _filterStatus = FilterStatus.uncompleted;
+                              _applyFilters();
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        label: '已过期',
+                        selected: _filterStatus == FilterStatus.expired,
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _filterStatus = FilterStatus.expired;
+                              _applyFilters();
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // 显示/隐藏过期任务的开关
+                  Row(
+                    children: [
+                      SizedBox(
+                        height: 24,
+                        child: Switch(
+                          value: _showExpired,
+                          onChanged: (value) {
+                            // 保存当前滚动位置
+                            final double? currentScrollPosition = 
+                                _scrollController.hasClients ? _scrollController.offset : null;
+                              
+                            setState(() {
+                              _showExpired = value;
+                              _applyFilters();
+                            });
+                            
+                            // 恢复滚动位置
+                            if (currentScrollPosition != null && _scrollController.hasClients) {
+                              Future.microtask(() {
+                                if (_scrollController.hasClients) {
+                                  _scrollController.jumpTo(
+                                    currentScrollPosition.clamp(
+                                      0.0, 
+                                      _scrollController.position.maxScrollExtent
+                                    )
+                                  );
+                                }
+                              });
+                            }
+                          },
+                          activeColor: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _showExpired ? "隐藏过期任务" : "显示过期任务",
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
-              );
-            },
-          ),
+              ),
+            ),
+            
+            // 任务列表
+            Expanded(
+              child: groupedSchedules.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.event_note,
+                          size: 64,
+                          color: Colors.grey[300],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '没有找到匹配的任务',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 16,
+                          ),
+                        ),
+                        if (_searchText.isNotEmpty || _filterStatus != FilterStatus.all) ...[
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _searchController.clear();
+                                _filterStatus = FilterStatus.all;
+                                _showExpired = false;
+                                _applyFilters();
+                              });
+                            },
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('清除筛选条件'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadTasks,
+                    child: ListView.builder(
+                      controller: _scrollController, // 添加ScrollController
+                      padding: const EdgeInsets.all(16),
+                      itemCount: groupedSchedules.length,
+                      itemBuilder: (context, index) {
+                        final date = groupedSchedules.keys.elementAt(index);
+                        final schedules = groupedSchedules[date]!;
+                        
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 日期标题
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _isToday(date) 
+                                          ? Theme.of(context).colorScheme.primary
+                                          : _isPast(date) 
+                                              ? Colors.grey
+                                              : Theme.of(context).colorScheme.primary,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      '${date.month}月${date.day}日',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _getWeekday(date.weekday),
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  if (_isToday(date))
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green[100],
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        '今天',
+                                        style: TextStyle(
+                                          color: Colors.green,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  if (_isPast(date) && !_isToday(date))
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[100],
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        '已过期',
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            // 日程列表
+                            ...schedules.map((item) => TaskItemWidget(
+                              item: item,
+                              onToggleComplete: () => _toggleComplete(item),
+                              onDelete: () => _deleteSchedule(item),
+                              onEdit: (scheduleItem) => _editSchedule(scheduleItem),
+                              // 查找并传递原始ID
+                              originalId: _findOriginalScheduleItem(item)?.id ?? '',
+                            )).toList(),
+                            // 分隔线
+                            if (index < groupedSchedules.length - 1)
+                              const Divider(height: 32),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+            ),
+          ],
         );
       }
     );
   }
+  
+  // 构建筛选选项按钮
+  Widget _buildFilterChip({
+    required String label, 
+    required bool selected, 
+    required ValueChanged<bool> onSelected
+  }) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: onSelected,
+      checkmarkColor: Colors.white,
+      selectedColor: Theme.of(context).colorScheme.primary,
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : Colors.black,
+        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+      ),
+    );
+  }
+  
+  // 判断日期是否是今天
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year && date.month == now.month && date.day == now.day;
+  }
+  
+  // 判断日期是否已过期
+  bool _isPast(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return date.isBefore(today);
+  }
+}
+
+// 筛选状态枚举
+enum FilterStatus {
+  all,         // 全部
+  completed,   // 已完成
+  uncompleted, // 未完成
+  expired,     // 已过期
 } 

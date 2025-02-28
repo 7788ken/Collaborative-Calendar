@@ -216,13 +216,42 @@ class DatabaseHelper {
   
   // 更新日程
   Future<void> updateSchedule(ScheduleItem schedule) async {
-    final db = await database;
-    await db.update(
-      'schedules',
-      schedule.toMap(),
-      where: 'id = ?',
-      whereArgs: [schedule.id],
-    );
+    try {
+      print('数据库助手: 开始更新日程 ${schedule.title}，ID: ${schedule.id}');
+      print('数据库助手: 更新的日程详情：${schedule.toMap()}');
+      
+      final db = await database;
+      final updateCount = await db.update(
+        'schedules',
+        schedule.toMap(),
+        where: 'id = ?',
+        whereArgs: [schedule.id],
+      );
+      
+      if (updateCount > 0) {
+        print('数据库助手: 日程更新成功，更新了 $updateCount 条记录');
+      } else {
+        print('数据库助手: 警告 - 日程更新未修改任何记录，可能ID不存在: ${schedule.id}');
+        print('数据库助手: 检查是否存在该ID的记录...');
+        
+        final result = await db.query(
+          'schedules',
+          where: 'id = ?',
+          whereArgs: [schedule.id],
+        );
+        
+        if (result.isEmpty) {
+          print('数据库助手: 确认ID不存在，尝试插入新记录');
+          await db.insert('schedules', schedule.toMap());
+          print('数据库助手: 成功插入了新记录，ID: ${schedule.id}');
+        } else {
+          print('数据库助手: ID存在但更新失败，可能数据未变化: ${result.first}');
+        }
+      }
+    } catch (e) {
+      print('数据库助手: 更新日程时出错: $e');
+      rethrow; // 重新抛出异常以便上层捕获
+    }
   }
   
   // 删除日程

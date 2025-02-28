@@ -147,8 +147,8 @@ class _MainPageState extends State<MainPage> {
   final List<String> _titles = ['日历', '任务', '我的'];
 
   late final List<Widget> _pages = [
-    const SchedulePage(), // 首页放日历页面
-    const TaskPage(), // 任务页面
+    SchedulePage(key: SchedulePage.globalKey), // 使用全局Key
+    TaskPage(key: TaskPage.globalKey), // 使用全局Key
     const ProfilePage(), // 个人信息页面
   ];
 
@@ -242,17 +242,51 @@ class _MainPageState extends State<MainPage> {
                   if (result == true) {
                     print('添加日程返回结果为true，准备刷新页面');
                     
-                    // 如果当前是日历页面，刷新日历
-                    if (_currentIndex == 0) {
-                      print('刷新日历页面');
+                    // 先获取ScheduleData以便通知全局更新
+                    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+                    
+                    // 先强制刷新ScheduleData，通知所有监听者
+                    scheduleData.forceRefresh();
+                    
+                    // 直接通过全局Key刷新任务页面
+                    print('通过GlobalKey强制刷新任务页面');
+                    if (TaskPage.globalKey.currentState != null) {
+                      TaskPage.globalKey.currentState!.reloadTasks();
+                    } else {
+                      print('TaskPage全局Key未初始化，尝试其他方式刷新');
+                      TaskPage.refreshTasks(context);
+                    }
+                    
+                    // 直接通过全局Key刷新日历页面
+                    print('通过GlobalKey强制刷新日历页面');
+                    if (SchedulePage.globalKey.currentState != null) {
+                      SchedulePage.globalKey.currentState!.reloadSchedules();
+                    } else {
+                      print('SchedulePage全局Key未初始化，尝试其他方式刷新');
                       SchedulePage.refreshSchedules(context);
                     }
                     
-                    // 无论在哪个页面，都刷新任务页面
-                    print('刷新任务页面');
-                    // 添加延迟确保数据库操作完成
-                    Future.delayed(const Duration(milliseconds: 500), () {
+                    // 添加多次延时刷新，确保数据更新到位
+                    // 100ms后第一次延时刷新
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      print('延时100ms后刷新页面（第2次）');
+                      scheduleData.forceRefresh();
                       TaskPage.refreshTasks(context);
+                      SchedulePage.refreshSchedules(context);
+                    });
+                    
+                    // 300ms后第二次延时刷新
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      print('延时300ms后刷新页面（第3次）');
+                      TaskPage.refreshTasks(context);
+                      SchedulePage.refreshSchedules(context);
+                    });
+                    
+                    // 600ms后第三次延时刷新，确保完全更新
+                    Future.delayed(const Duration(milliseconds: 600), () {
+                      print('延时600ms后刷新页面（第4次）');
+                      TaskPage.refreshTasks(context);
+                      SchedulePage.refreshSchedules(context);
                     });
                   }
                 });

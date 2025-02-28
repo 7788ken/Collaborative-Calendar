@@ -10,20 +10,46 @@ import 'widgets/schedule_item.dart' as ui;
 import 'widgets/add_schedule_sheet.dart';
 import 'widgets/edit_schedule_sheet.dart';
 import 'dart:math' as math;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
+
+  // 添加全局Key以便在任何地方刷新
+  static final GlobalKey<_SchedulePageState> globalKey = GlobalKey<_SchedulePageState>();
 
   // 添加刷新方法
   static void refreshSchedules(BuildContext context) {
     // 使用Provider.of查找_SchedulePageState并调用刷新方法
     print('调用刷新日程方法');
+    
+    // 尝试通过全局Key刷新
+    if (globalKey.currentState != null) {
+      print('通过GlobalKey找到SchedulePage状态，强制刷新日程');
+      globalKey.currentState!._loadSchedules();
+      return;
+    }
+    
+    // 备用方法：通过context查找
     final state = context.findAncestorStateOfType<_SchedulePageState>();
     if (state != null) {
       print('找到SchedulePage状态，刷新日程');
-      state._loadSchedules();
+      // 使用Future.microtask确保在当前帧渲染完成后执行刷新
+      Future.microtask(() {
+        state._loadSchedules();
+      });
     } else {
-      print('未找到SchedulePage状态');
+      print('未找到SchedulePage状态，尝试使用Provider查找');
+      // 使用Provider尝试刷新所有SchedulePage
+      try {
+        // 使用通知告知所有状态更新
+        final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+        scheduleData.notifyListeners();
+        print('通过Provider通知刷新成功');
+      } catch (e) {
+        print('尝试Provider刷新失败: $e');
+      }
     }
   }
 
@@ -48,6 +74,11 @@ class _SchedulePageState extends State<SchedulePage>
 
   // 记录当前活跃的日历本ID，用于检测变化
   String? _currentActiveCalendarId;
+
+  // 暴露给GlobalKey使用
+  void reloadSchedules() {
+    _loadSchedules();
+  }
 
   @override
   void initState() {
@@ -130,8 +161,8 @@ class _SchedulePageState extends State<SchedulePage>
 
   // 加载日程数据
   Future<void> _loadSchedules() async {
-    // 注释掉这个条件检查，确保每次调用都重新加载数据
-    // if (_isLoading && _scheduleItems.isNotEmpty) return;
+    // 确保无论什么情况都重新加载数据
+    print('开始加载日程数据');
 
     if (mounted) {
       setState(() {
@@ -182,13 +213,22 @@ class _SchedulePageState extends State<SchedulePage>
       );
 
       print('刷新日程: 加载了 ${items.length} 条日程数据');
+      
+      // 确保任务完成状态是最新的
+      if (mounted) {
+        final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+        await scheduleData.loadTaskCompletionStatus();
+        print('已重新加载任务完成状态数据');
+      }
 
+      // 更新界面
       if (mounted) {
         setState(() {
           _scheduleItems = items;
           _scheduleItemsMap = _groupSchedulesByDate(items);
           _isLoading = false;
         });
+        print('日历页面数据已更新，日程数量: ${items.length}');
       }
     } catch (e) {
       print('加载日程数据时出错: $e');
@@ -300,34 +340,33 @@ class _SchedulePageState extends State<SchedulePage>
                     ? const Center(child: CircularProgressIndicator())
                     : Stack(
                       children: [
-                        // 日历网格
-                        Expanded(
-                          child: CalendarGrid(
-                            currentMonth: _currentMonth,
-                            selectedDay: _selectedDay,
-                            onDateSelected: (date) {
-                              setState(() {
-                                _selectedDay = date;
-                              });
-                              
-                              // 选择日期后控制面板展开
-                              if (_dragController.isAttached) {
-                                _dragController.animateTo(
-                                  0.6,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeInOut,
-                                );
-                              }
-                            },
-                            onMonthChanged: (month) {
-                              setState(() {
-                                _currentMonth = month;
-                              });
-                              _loadSchedules();
-                            },
-                            scheduleItemsMap: _scheduleItemsMap,
-                            getScheduleCountForDate: _getCompletedScheduleCountForDate,
-                          ),
+                        // 日历网格 - 直接放在 Stack 中，不使用 Expanded
+                        CalendarGrid(
+                          currentMonth: _currentMonth,
+                          selectedDay: _selectedDay,
+                          onDateSelected: (date) {
+                            setState(() {
+                              _selectedDay = date;
+                            });
+                            
+                            // 选择日期后不再自动展开面板，保持默认状态
+                            // 注释掉之前的代码
+                            // if (_dragController.isAttached) {
+                            //   _dragController.animateTo(
+                            //     0.6,
+                            //     duration: const Duration(milliseconds: 300),
+                            //     curve: Curves.easeInOut,
+                            //   );
+                            // }
+                          },
+                          onMonthChanged: (month) {
+                            setState(() {
+                              _currentMonth = month;
+                            });
+                            _loadSchedules();
+                          },
+                          scheduleItemsMap: _scheduleItemsMap,
+                          getScheduleCountForDate: _getCompletedScheduleCountForDate,
                         ),
 
                         // 使用 DraggableScrollableSheet 替代自定义面板
@@ -510,7 +549,7 @@ class _SchedulePageState extends State<SchedulePage>
           return ui.ScheduleItemWidget(
             item: schedule,
             onToggleComplete: () {
-              _showScheduleOptions(schedule);
+              _toggleTaskComplete(schedule);
             },
           );
         }, childCount: schedules.length),
@@ -747,5 +786,24 @@ class _SchedulePageState extends State<SchedulePage>
       default:
         return '';
     }
+  }
+
+  // 切换任务完成状态
+  void _toggleTaskComplete(ScheduleItem schedule) {
+    // 创建一个唯一的任务键
+    final String taskKey = '${schedule.startTime.year}-${schedule.startTime.month}-${schedule.startTime.day}-${schedule.id}';
+    
+    // 获取 ScheduleData Provider
+    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+    // 获取当前状态
+    final currentStatus = scheduleData.getTaskCompletionStatus(taskKey);
+    // 更新为相反的状态
+    scheduleData.updateTaskCompletionStatus(taskKey, !currentStatus);
+    
+    // 添加振动反馈
+    HapticFeedback.lightImpact();
+    
+    // 刷新UI以显示更新后的状态
+    setState(() {});
   }
 }

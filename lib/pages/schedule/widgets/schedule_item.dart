@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../models/schedule_item.dart';
+import '../../../data/schedule_data.dart';
+import 'package:provider/provider.dart';
 
 class ScheduleItemWidget extends StatelessWidget {
   final ScheduleItem item;
@@ -18,10 +21,16 @@ class ScheduleItemWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 获取任务完成状态
+    final scheduleData = Provider.of<ScheduleData>(context);
+    // 使用正确的方法名和任务键格式
+    final taskKey = "${item.startTime.year}-${item.startTime.month}-${item.startTime.day}-${item.id}";
+    final isCompleted = scheduleData.getTaskCompletionStatus(taskKey);
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isCompleted ? Colors.grey.shade100 : Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -39,7 +48,9 @@ class ScheduleItemWidget extends StatelessWidget {
               width: 60,
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withAlpha(20),
+                color: isCompleted 
+                    ? Colors.green.withAlpha(30)
+                    : Theme.of(context).colorScheme.primary.withAlpha(20),
                 borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
               ),
               child: Column(
@@ -75,7 +86,10 @@ class ScheduleItemWidget extends StatelessWidget {
                   children: [
                     Text(
                       item.title,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        decoration: isCompleted ? TextDecoration.lineThrough : null,
+                        color: isCompleted ? Colors.grey : Colors.black87,
+                      ),
                     ),
                     if (item.location != null && item.location!.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -83,6 +97,7 @@ class ScheduleItemWidget extends StatelessWidget {
                         '📍 ${item.location}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.grey[600],
+                          decoration: isCompleted ? TextDecoration.lineThrough : null,
                         ),
                       ),
                     ],
@@ -92,6 +107,7 @@ class ScheduleItemWidget extends StatelessWidget {
                         item.description!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.grey[600],
+                          decoration: isCompleted ? TextDecoration.lineThrough : null,
                         ),
                       ),
                     ],
@@ -99,12 +115,23 @@ class ScheduleItemWidget extends StatelessWidget {
                 ),
               ),
             ),
+            // 完成按钮
             IconButton(
-              icon: Icon(
-                Icons.more_vert,
-                color: Colors.grey[400],
-              ),
-              onPressed: onToggleComplete,
+              icon: isCompleted 
+                  ? const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                    )
+                  : Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.grey[400],
+                    ),
+              onPressed: () {
+                // 添加振动反馈
+                HapticFeedback.lightImpact();
+                onToggleComplete();
+              },
+              tooltip: isCompleted ? '标记为未完成' : '标记为已完成',
             ),
           ],
         ),

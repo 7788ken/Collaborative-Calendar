@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../models/schedule_item.dart';
 
-class CalendarGrid extends StatelessWidget {
+class CalendarGrid extends StatefulWidget {
   final DateTime currentMonth;
   final DateTime selectedDay;
   final Function(DateTime) onDateSelected;
@@ -10,26 +10,42 @@ class CalendarGrid extends StatelessWidget {
   final int Function(DateTime) getScheduleCountForDate;
 
   const CalendarGrid({
-    super.key,
+    Key? key,
     required this.currentMonth,
     required this.selectedDay,
     required this.onDateSelected,
     required this.onMonthChanged,
     required this.scheduleItemsMap,
     required this.getScheduleCountForDate,
-  });
+  }) : super(key: key);
+
+  @override
+  State<CalendarGrid> createState() => _CalendarGridState();
+}
+
+class _CalendarGridState extends State<CalendarGrid> {
+  @override
+  void didUpdateWidget(CalendarGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // 如果scheduleItemsMap发生变化，强制刷新
+    if (widget.scheduleItemsMap != oldWidget.scheduleItemsMap) {
+      print('日历网格检测到scheduleItemsMap变化，强制刷新');
+      setState(() {});
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     // 获取当月第一天是周几（0是周日，1是周一）
-    final firstDayWeekday = DateTime(currentMonth.year, currentMonth.month, 1).weekday;
+    final firstDayWeekday = DateTime(widget.currentMonth.year, widget.currentMonth.month, 1).weekday;
     // 获取上个月的天数
-    final lastMonthDays = DateTime(currentMonth.year, currentMonth.month, 0).day;
+    final lastMonthDays = DateTime(widget.currentMonth.year, widget.currentMonth.month, 0).day;
     // 计算需要显示的上个月的天数
     final previousMonthDays = (firstDayWeekday + 6) % 7;
     
     // 获取这个月的所有日期
-    final daysInMonth = _getDaysInMonth(currentMonth);
+    final daysInMonth = _getDaysInMonth(widget.currentMonth);
     
     // 创建日历网格的所有日期（包括上个月和下个月的日期）
     final allDays = <DateTime>[];
@@ -37,7 +53,7 @@ class CalendarGrid extends StatelessWidget {
     // 添加上个月的日期
     for (var i = previousMonthDays - 1; i >= 0; i--) {
       allDays.add(
-        DateTime(currentMonth.year, currentMonth.month - 1, lastMonthDays - i),
+        DateTime(widget.currentMonth.year, widget.currentMonth.month - 1, lastMonthDays - i),
       );
     }
     
@@ -48,7 +64,7 @@ class CalendarGrid extends StatelessWidget {
     final remainingDays = 42 - allDays.length;
     for (var i = 1; i <= remainingDays; i++) {
       allDays.add(
-        DateTime(currentMonth.year, currentMonth.month + 1, i),
+        DateTime(widget.currentMonth.year, widget.currentMonth.month + 1, i),
       );
     }
     
@@ -61,14 +77,14 @@ class CalendarGrid extends StatelessWidget {
             children: [
               IconButton(
                 onPressed: () {
-                  onMonthChanged(
-                    DateTime(currentMonth.year, currentMonth.month - 1),
+                  widget.onMonthChanged(
+                    DateTime(widget.currentMonth.year, widget.currentMonth.month - 1),
                   );
                 },
                 icon: const Icon(Icons.chevron_left),
               ),
               Text(
-                '${currentMonth.year}年${currentMonth.month}月',
+                '${widget.currentMonth.year}年${widget.currentMonth.month}月',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -76,8 +92,8 @@ class CalendarGrid extends StatelessWidget {
               ),
               IconButton(
                 onPressed: () {
-                  onMonthChanged(
-                    DateTime(currentMonth.year, currentMonth.month + 1),
+                  widget.onMonthChanged(
+                    DateTime(widget.currentMonth.year, widget.currentMonth.month + 1),
                   );
                 },
                 icon: const Icon(Icons.chevron_right),
@@ -110,10 +126,10 @@ class CalendarGrid extends StatelessWidget {
             itemCount: allDays.length,
             itemBuilder: (context, index) {
               final day = allDays[index];
-              final isCurrentMonth = day.month == currentMonth.month;
-              final isSelected = day.year == selectedDay.year &&
-                  day.month == selectedDay.month &&
-                  day.day == selectedDay.day;
+              final isCurrentMonth = day.month == widget.currentMonth.month;
+              final isSelected = day.year == widget.selectedDay.year &&
+                  day.month == widget.selectedDay.month &&
+                  day.day == widget.selectedDay.day;
               final isToday = day.year == DateTime.now().year &&
                   day.month == DateTime.now().month &&
                   day.day == DateTime.now().day;
@@ -127,19 +143,19 @@ class CalendarGrid extends StatelessWidget {
   }
 
   Widget _buildDayCell(BuildContext context, DateTime day, bool isSelected, bool isCurrentMonth, bool isToday) {
-    final daySchedules = scheduleItemsMap[day] ?? [];
+    final daySchedules = widget.scheduleItemsMap[day] ?? [];
     
     // 获取总任务数量
     final totalCount = daySchedules.length;
     
     // 使用回调函数获取已完成的任务数量
-    final completedCount = getScheduleCountForDate(day);
+    final completedCount = widget.getScheduleCountForDate(day);
     
     // 计算未完成的任务数量
     final uncompletedCount = totalCount - completedCount;
     
     return InkWell(
-      onTap: () => onDateSelected(day),
+      onTap: () => widget.onDateSelected(day),
       child: Container(
         decoration: BoxDecoration(
           color: isToday 

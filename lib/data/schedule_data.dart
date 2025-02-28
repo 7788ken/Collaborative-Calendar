@@ -20,6 +20,7 @@ class ScheduleData extends ChangeNotifier {
   // 更新任务完成状态
   Future<void> updateTaskCompletionStatus(String taskKey, bool isCompleted) async {
     _taskCompletionStatus[taskKey] = isCompleted;
+    // 立即通知监听者
     notifyListeners();
     
     // 保存到SharedPreferences
@@ -27,8 +28,29 @@ class ScheduleData extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('task_$taskKey', isCompleted);
       print('任务状态已保存: $taskKey = $isCompleted');
+      
+      // 保存完成后再次通知，确保状态完全更新
+      Future.delayed(Duration(milliseconds: 50), () {
+        notifyListeners();
+      });
     } catch (e) {
       print('保存任务状态时出错: $e');
+    }
+  }
+
+  // 删除任务完成状态
+  Future<void> removeTaskCompletionStatus(String taskKey) async {
+    // 从内存中移除
+    _taskCompletionStatus.remove(taskKey);
+    notifyListeners();
+    
+    // 从SharedPreferences中移除
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('task_$taskKey');
+      print('任务状态已移除: $taskKey');
+    } catch (e) {
+      print('移除任务状态时出错: $e');
     }
   }
 
@@ -38,15 +60,28 @@ class ScheduleData extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final allKeys = prefs.getKeys();
       
+      // 创建新的状态Map
+      final Map<String, bool> newStatus = {};
+      
       for (final key in allKeys) {
         if (key.startsWith('task_')) {
           final taskKey = key.substring(5); // 去掉前缀'task_'
-          _taskCompletionStatus[taskKey] = prefs.getBool(key) ?? false;
+          newStatus[taskKey] = prefs.getBool(key) ?? false;
         }
       }
       
+      // 一次性更新，减少不必要的刷新
+      _taskCompletionStatus = newStatus;
+      
       print('已加载 ${_taskCompletionStatus.length} 个任务状态');
+      
+      // 立即通知监听者
       notifyListeners();
+      
+      // 延迟后再次通知，确保所有UI组件都能收到更新
+      Future.delayed(Duration(milliseconds: 50), () {
+        notifyListeners();
+      });
     } catch (e) {
       print('加载任务状态时出错: $e');
     }
@@ -64,6 +99,43 @@ class ScheduleData extends ChangeNotifier {
     }
     
     return count;
+  }
+
+  // 清理不存在任务的完成状态记录
+  Future<void> cleanupTaskCompletionStatus(List<ScheduleItem> allTasks) async {
+    // 创建有效的任务键集合
+    final Set<String> validTaskKeys = {};
+    for (final task in allTasks) {
+      final taskKey = '${task.startTime.year}-${task.startTime.month}-${task.startTime.day}-${task.id}';
+      validTaskKeys.add(taskKey);
+    }
+    
+    // 找出所有无效的任务键
+    final List<String> keysToRemove = [];
+    for (final key in _taskCompletionStatus.keys) {
+      if (!validTaskKeys.contains(key)) {
+        keysToRemove.add(key);
+      }
+    }
+    
+    // 从内存中移除无效的记录
+    for (final key in keysToRemove) {
+      _taskCompletionStatus.remove(key);
+    }
+    
+    // 从SharedPreferences中移除无效的记录
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final key in keysToRemove) {
+        await prefs.remove('task_$key');
+      }
+      print('已清理 ${keysToRemove.length} 个无效的任务完成状态记录');
+    } catch (e) {
+      print('清理任务状态记录时出错: $e');
+    }
+    
+    // 通知监听者状态变化
+    notifyListeners();
   }
 
   // 测试数据 - 使用正确的task_models.ScheduleItem而不是日历模型
@@ -163,4 +235,11 @@ class ScheduleData extends ChangeNotifier {
       date: DateTime.now().add(const Duration(days: 7)),
     ),
   ];
+
+  // 强制刷新日历页面
+  void forceRefresh() {
+    // 仅调用通知，不做其他操作
+    print('强制刷新日历页面状态');
+    notifyListeners();
+  }
 } 

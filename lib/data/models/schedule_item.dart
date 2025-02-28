@@ -21,8 +21,12 @@ class ScheduleItem {
   });
   
   // 将任务项转换为日历日程项
-  calendar_models.ScheduleItem toCalendarSchedule({String calendarId = 'default'}) {
+  calendar_models.ScheduleItem toCalendarSchedule({
+    String calendarId = 'default',
+    String? id,
+  }) {
     return calendar_models.ScheduleItem(
+      id: id,
       calendarId: calendarId,
       title: title,
       description: remark,

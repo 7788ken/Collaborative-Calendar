@@ -48,7 +48,14 @@ class ScheduleService {
 
   // 更新日程
   Future<void> updateSchedule(ScheduleItem schedule) async {
-    await _dbHelper.updateSchedule(schedule);
+    try {
+      print('ScheduleService: 开始更新日程 ${schedule.title}，ID: ${schedule.id}');
+      await _dbHelper.updateSchedule(schedule);
+      print('ScheduleService: 日程更新成功');
+    } catch (e) {
+      print('ScheduleService: 更新日程时出错: $e');
+      rethrow; // 重新抛出异常以便上层捕获
+    }
   }
 
   // 删除日程

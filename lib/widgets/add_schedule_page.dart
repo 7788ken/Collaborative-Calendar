@@ -17,6 +17,9 @@ class AddSchedulePage extends StatefulWidget {
 }
 
 class _AddSchedulePageState extends State<AddSchedulePage> {
+  // 添加表单Key用于验证
+  final _formKey = GlobalKey<FormState>();
+  
   late DateTime _selectedDate;
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
@@ -120,20 +123,17 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
   }
 
   // 保存日程
-  Future<void> _saveSchedule() async {
-    // 表单验证
-    if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入日程标题')),
-      );
-      return;
+  Future<bool> _saveSchedule() async {
+    // 首先进行表单验证
+    if (!_formKey.currentState!.validate()) {
+      return false;
     }
-
-    setState(() {
-      _isSaving = true;
-    });
-
+    
     try {
+      setState(() {
+        _isSaving = true;
+      });
+
       // 获取当前活跃的日历本ID
       final calendarManager = Provider.of<CalendarBookManager>(
         context, 
@@ -151,7 +151,7 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         setState(() {
           _isSaving = false;
         });
-        return;
+        return false;
       }
 
       // 创建开始时间和结束时间的DateTime对象
@@ -202,25 +202,56 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       
       // 添加调试输出
       print('准备保存日程: ${newSchedule.title}');
+      print('日程ID: ${newSchedule.id}');
+      print('日程详细信息: ${newSchedule.toMap()}');
       
       // 保存到数据库
       if (widget.scheduleItem == null) {
         // 新增日程
         print('调用添加日程方法');
-        await _scheduleService.addSchedule(newSchedule);
-        print('日程添加成功');
+        try {
+          await _scheduleService.addSchedule(newSchedule);
+          print('日程添加成功');
+        } catch (e) {
+          print('日程添加失败: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('添加失败: ${e.toString()}')),
+            );
+          }
+          setState(() {
+            _isSaving = false;
+          });
+          return false;
+        }
       } else {
         // 更新现有日程
         print('调用更新日程方法');
-        await _scheduleService.updateSchedule(newSchedule);
-        print('日程更新成功');
+        print('原始日程ID: ${widget.scheduleItem!.id}');
+        print('更新后日程ID: ${newSchedule.id}');
+        try {
+          await _scheduleService.updateSchedule(newSchedule);
+          print('日程更新成功');
+        } catch (e) {
+          print('日程更新失败: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('更新失败: ${e.toString()}')),
+            );
+          }
+          setState(() {
+            _isSaving = false;
+          });
+          return false;
+        }
       }
       
+      print('导航返回上一页，结果为true');
       // 返回上一页，并传递保存成功的标志
       if (mounted) {
-        print('导航返回上一页，结果为true');
         Navigator.pop(context, true);
       }
+      return true;
     } catch (e) {
       print('保存日程时出错: $e');
       if (mounted) {
@@ -231,6 +262,7 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       setState(() {
         _isSaving = false;
       });
+      return false;
     }
   }
 
@@ -290,143 +322,152 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
               ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 日期选择
-            _buildSectionTitle('日期'),
-            InkWell(
-              onTap: _selectDate,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.calendar_today,
-                      size: 20,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${_selectedDate.year}年${_selectedDate.month}月${_selectedDate.day}日',
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  ],
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 日期选择
+              _buildSectionTitle('日期'),
+              InkWell(
+                onTap: _selectDate,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_today,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_selectedDate.year}年${_selectedDate.month}月${_selectedDate.day}日',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const Divider(),
+              const Divider(),
 
-            // 全天选项
-            _buildSectionTitle('全天事件'),
-            Row(
-              children: [
-                Switch(
-                  value: _isAllDay,
-                  onChanged: (value) {
-                    setState(() {
-                      _isAllDay = value;
-                    });
-                  },
-                  activeColor: Theme.of(context).colorScheme.primary,
-                ),
-                Text(_isAllDay ? '是' : '否', 
-                     style: const TextStyle(fontSize: 16)),
-              ],
-            ),
-            const Divider(),
-
-            // 时间选择 (仅在非全天事件时显示)
-            if (!_isAllDay) ...[
-              _buildSectionTitle('时间'),
+              // 全天选项
+              _buildSectionTitle('全天事件'),
               Row(
                 children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _selectTime(true),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.access_time,
-                              size: 20,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}',
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  Switch(
+                    value: _isAllDay,
+                    onChanged: (value) {
+                      setState(() {
+                        _isAllDay = value;
+                      });
+                    },
+                    activeColor: Theme.of(context).colorScheme.primary,
                   ),
-                  const Text(' - '),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _selectTime(false),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.access_time,
-                              size: 20,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}',
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  Text(_isAllDay ? '是' : '否', 
+                       style: const TextStyle(fontSize: 16)),
                 ],
               ),
               const Divider(),
+
+              // 时间选择 (仅在非全天事件时显示)
+              if (!_isAllDay) ...[
+                _buildSectionTitle('时间'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _selectTime(true),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.access_time,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Text(' - '),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _selectTime(false),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.access_time,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(),
+              ],
+
+              // 标题输入
+              _buildSectionTitle('标题'),
+              TextFormField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  hintText: '请输入日程标题',
+                  border: InputBorder.none,
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return '请输入日程标题';
+                  }
+                  return null;
+                },
+              ),
+              const Divider(),
+
+              // 地点输入
+              _buildSectionTitle('地点'),
+              TextField(
+                controller: _locationController,
+                decoration: const InputDecoration(
+                  hintText: '请输入地点',
+                  border: InputBorder.none,
+                ),
+              ),
+              const Divider(),
+
+              // 备注输入
+              _buildSectionTitle('描述'),
+              TextField(
+                controller: _descriptionController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: '请输入描述信息',
+                  border: InputBorder.none,
+                ),
+              ),
+              const Divider(),
             ],
-
-            // 标题输入
-            _buildSectionTitle('标题'),
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                hintText: '请输入日程标题',
-                border: InputBorder.none,
-              ),
-            ),
-            const Divider(),
-
-            // 地点输入
-            _buildSectionTitle('地点'),
-            TextField(
-              controller: _locationController,
-              decoration: const InputDecoration(
-                hintText: '请输入地点',
-                border: InputBorder.none,
-              ),
-            ),
-            const Divider(),
-
-            // 备注输入
-            _buildSectionTitle('描述'),
-            TextField(
-              controller: _descriptionController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: '请输入描述信息',
-                border: InputBorder.none,
-              ),
-            ),
-            const Divider(),
-          ],
+          ),
         ),
       ),
     );

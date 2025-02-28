@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../data/schedule_data.dart';
 import 'package:provider/provider.dart';
 import '../../main.dart';  // 导入 ThemeProvider
+import '../../data/schedule_service.dart'; // 添加日程服务的导入
+import '../../pages/schedule/schedule_page.dart'; // 添加日历页面的导入
+import '../../data/calendar_book_manager.dart'; // 添加日历管理器的导入
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -242,14 +245,48 @@ class _SettingsPageState extends State<SettingsPage> {
           const _SectionTitle('危险区域', color: Colors.red),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[50],
-                foregroundColor: Colors.red,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onPressed: () => _showClearConfirmDialog(context),
-              child: const Text('清空所有日程'),
+            child: Column(
+              children: [
+                // 修复统计按钮
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange[50],
+                    foregroundColor: Colors.orange,
+                    minimumSize: const Size.fromHeight(48), // 设置按钮最小高度
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () => _showRepairStatisticsConfirmDialog(context),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.auto_fix_high),
+                      SizedBox(width: 8),
+                      Text('修复统计'),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // 清空所有日程按钮
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[50],
+                    foregroundColor: Colors.red,
+                    minimumSize: const Size.fromHeight(48), // 设置按钮最小高度
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () => _showClearConfirmDialog(context),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.delete_forever),
+                      SizedBox(width: 8),
+                      Text('清空所有日程'),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -395,6 +432,108 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  void _showRepairStatisticsConfirmDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认修复统计'),
+        content: const Text('此操作将清理不存在的任务完成状态记录，可能会影响日历上的任务完成统计数据。\n如果您发现日历统计数据异常，可以使用此功能修复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _cleanupTaskStatus(context);
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.orange,
+            ),
+            child: const Text('确认修复'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 清理任务状态记录
+  Future<void> _cleanupTaskStatus(BuildContext context) async {
+    // 显示加载状态
+    final ScaffoldMessengerState scaffoldMessenger = ScaffoldMessenger.of(context);
+    
+    // 显示进度指示器
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+    
+    try {
+      // 获取日历管理器
+      final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+      final activeCalendarId = calendarManager.activeBook?.id;
+      
+      if (activeCalendarId == null) {
+        // 关闭加载对话框
+        Navigator.pop(context);
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('无法获取当前日历ID')),
+        );
+        return;
+      }
+      
+      // 获取所有任务
+      final scheduleService = ScheduleService();
+      
+      // 使用较大的日期范围获取所有历史和未来的任务
+      final pastDate = DateTime(2000, 1, 1); // 过去的日期，确保包含所有历史任务
+      final futureDate = DateTime.now().add(const Duration(days: 3650)); // 未来10年
+      
+      final allSchedules = await scheduleService.getSchedulesInRange(
+        activeCalendarId,
+        pastDate,
+        futureDate,
+      );
+      
+      // 清理任务状态
+      final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+      await scheduleData.cleanupTaskCompletionStatus(allSchedules);
+      
+      // 关闭加载对话框
+      Navigator.pop(context);
+      
+      // 显示成功消息
+      int removedCount = 0; // 这里理想情况应该从cleanupTaskCompletionStatus返回移除数量
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('统计数据已修复${removedCount > 0 ? "，移除了 $removedCount 个无效记录" : ""}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      // 刷新日历页面
+      if (context.mounted) {
+        SchedulePage.refreshSchedules(context);
+      }
+    } catch (e) {
+      // 关闭加载对话框
+      Navigator.pop(context);
+      
+      // 显示错误消息
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('修复统计时出错: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      print('修复统计时出错: $e');
+    }
   }
 }
 

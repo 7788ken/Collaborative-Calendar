@@ -9,6 +9,7 @@ class TaskItemWidget extends StatefulWidget {
   final VoidCallback onToggleComplete;
   final VoidCallback onDelete;
   final Function(calendar_models.ScheduleItem) onEdit;
+  final String originalId;
 
   const TaskItemWidget({
     super.key,
@@ -16,6 +17,7 @@ class TaskItemWidget extends StatefulWidget {
     required this.onToggleComplete,
     required this.onDelete,
     required this.onEdit,
+    required this.originalId,
   });
 
   @override
@@ -138,7 +140,9 @@ class _TaskItemWidgetState extends State<TaskItemWidget> with SingleTickerProvid
                     GestureDetector(
                       onTap: () {
                         _closeSlide();
-                        widget.onEdit(widget.item.toCalendarSchedule());
+                        widget.onEdit(widget.item.toCalendarSchedule(
+                          id: widget.originalId, 
+                        ));
                       },
                       child: Container(
                         padding: const EdgeInsets.all(12),
