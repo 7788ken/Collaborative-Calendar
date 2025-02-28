@@ -369,6 +369,18 @@ class _SchedulePageState extends State<SchedulePage>
                           getScheduleCountForDate: _getCompletedScheduleCountForDate,
                         ),
 
+                        // 添加测试按钮
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          child: FloatingActionButton(
+                            mini: true,
+                            backgroundColor: Colors.red,
+                            child: const Icon(Icons.sync, color: Colors.white),
+                            onPressed: () => _testSyncSpecificTask(),
+                          ),
+                        ),
+
                         // 使用 DraggableScrollableSheet 替代自定义面板
                         DraggableScrollableSheet(
                           controller: _dragController,
@@ -803,7 +815,121 @@ class _SchedulePageState extends State<SchedulePage>
     // 添加振动反馈
     HapticFeedback.lightImpact();
     
+    // 更新数据库中的任务完成状态
+    _updateScheduleCompletionInDatabase(schedule, !currentStatus);
+    
+    // 获取日历管理器判断是否需要同步到云端
+    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+    try {
+      final calendarBook = calendarManager.books.firstWhere(
+        (book) => book.id == schedule.calendarId,
+        orElse: () => throw Exception('找不到日历本'),
+      );
+      
+      // 如果是共享日历，则同步到云端
+      if (calendarBook.isShared) {
+        print('日历页面：检测到共享日历的任务状态变更，准备同步到云端...');
+        Future.microtask(() async {
+          try {
+            // 修改此处，只同步被修改的特定任务，而不是所有任务
+            await calendarManager.syncSharedCalendarSchedules(
+              schedule.calendarId,
+              specificScheduleId: schedule.id
+            );
+            print('日历页面：云端同步完成');
+          } catch (e) {
+            print('日历页面：同步到云端时出错: $e');
+            // 但不显示错误，避免影响用户体验
+          }
+        });
+      }
+    } catch (e) {
+      print('获取日历本信息时出错: $e');
+    }
+    
     // 刷新UI以显示更新后的状态
     setState(() {});
+  }
+  
+  // 新增方法：更新数据库中任务的完成状态
+  Future<void> _updateScheduleCompletionInDatabase(ScheduleItem schedule, bool isCompleted) async {
+    try {
+      // 创建包含新完成状态的日程对象
+      final updatedSchedule = schedule.copyWith(isCompleted: isCompleted);
+      
+      // 使用ScheduleService更新数据库
+      final scheduleService = ScheduleService();
+      await scheduleService.updateSchedule(updatedSchedule);
+      
+      print('成功更新任务完成状态到数据库：${schedule.title}, 完成状态: $isCompleted');
+    } catch (e) {
+      print('更新任务完成状态到数据库时出错: $e');
+      // 不抛出异常，避免影响用户体验
+    }
+  }
+
+  // 测试同步指定任务
+  void _testSyncSpecificTask() async {
+    // 获取日历管理器实例
+    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+    
+    try {
+      // 显示加载指示器
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('正在同步指定任务...')
+            ],
+          ),
+        ),
+      );
+      
+      // 指定任务ID和分享码
+      final String scheduleId = 'ccc39192-c5c4-4830-9699-42fa09e648fc';
+      final String shareCode = 'ccbee1b02452';
+      
+      // 将任务设置为未完成
+      final result = await calendarManager.syncSpecificTask(shareCode, scheduleId, false);
+      
+      // 关闭加载对话框
+      if (mounted) Navigator.of(context).pop();
+      
+      print('同步结果: $result');
+      
+      // 提示同步结果
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('任务同步结果: ${result ? "成功" : "失败"}'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        
+        // 如果同步成功，刷新日程列表
+        if (result) {
+          _loadSchedules();
+        }
+      }
+    } catch (e) {
+      // 关闭加载对话框
+      if (mounted) Navigator.of(context).pop();
+      
+      print('测试同步时出错: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('同步错误: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 }

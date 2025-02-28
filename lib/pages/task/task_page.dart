@@ -284,18 +284,11 @@ class _TaskPageState extends State<TaskPage> {
   }
 
   void _deleteSchedule(task_models.ScheduleItem taskItem) {
-    // 查找对应的原始日程项
-    final originalItem = _scheduleItems.firstWhere(
-      (item) => DateTime(
-        item.startTime.year, 
-        item.startTime.month, 
-        item.startTime.day
-      ) == taskItem.date && 
-      item.title == taskItem.title,
-      orElse: () => ScheduleItem(id: '', calendarId: '', title: '', startTime: DateTime.now(), endTime: DateTime.now()),
-    );
+    print('准备删除任务: ${taskItem.title}');
     
-    if (originalItem.id.isEmpty) {
+    // 找到对应的原始日程项
+    final originalItem = _findOriginalScheduleItem(taskItem);
+    if (originalItem == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('找不到对应的日程')),
       );
@@ -329,7 +322,7 @@ class _TaskPageState extends State<TaskPage> {
                 // 生成任务键，用于从状态管理中移除
                 final String taskKey = '${originalItem.startTime.year}-${originalItem.startTime.month}-${originalItem.startTime.day}-${originalItem.id}';
                 
-                // 调用服务删除日程
+                // 调用服务删除日程（已在ScheduleService中处理云端同步）
                 await _scheduleService.deleteSchedule(originalItem.id);
                 
                 if (mounted) {
@@ -446,6 +439,30 @@ class _TaskPageState extends State<TaskPage> {
     
     // 更新Provider中的状态
     scheduleData.updateTaskCompletionStatus(taskKey, newStatus);
+    
+    // 获取日历管理器判断是否需要同步到云端
+    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+    final calendarBook = calendarManager.books.firstWhere(
+      (book) => book.id == originalItem.calendarId,
+      orElse: () => throw Exception('找不到日历本'),
+    );
+    
+    // 如果是共享日历，则同步到云端
+    if (calendarBook.isShared) {
+      print('检测到共享日历的任务状态变更，准备同步到云端...');
+      Future.microtask(() async {
+        try {
+          await calendarManager.syncSharedCalendarSchedules(
+            originalItem.calendarId,
+            specificScheduleId: originalItem.id
+          );
+          print('云端同步完成');
+        } catch (e) {
+          print('同步到云端时出错: $e');
+          // 但不显示错误，避免影响用户体验
+        }
+      });
+    }
     
     // 立即刷新日历页面
     SchedulePage.refreshSchedules(context);

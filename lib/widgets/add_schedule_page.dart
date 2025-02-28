@@ -246,6 +246,34 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         }
       }
       
+      // 判断是否需要同步到云端
+      try {
+        final calendarBook = calendarManager.books.firstWhere(
+          (book) => book.id == newSchedule.calendarId,
+          orElse: () => throw Exception('找不到日历本'),
+        );
+        
+        // 如果是共享日历，则同步到云端（只同步当前修改的日程）
+        if (calendarBook.isShared) {
+          print('日程页面：检测到共享日历的日程变更，准备同步到云端...');
+          print('同步单条日程，ID: ${newSchedule.id}');
+          
+          try {
+            // 只同步特定的日程ID，而不是整个日历的所有日程
+            await calendarManager.syncSharedCalendarSchedules(
+              newSchedule.calendarId,
+              specificScheduleId: newSchedule.id
+            );
+            print('日程页面：云端同步完成');
+          } catch (e) {
+            print('日程页面：同步到云端时出错: $e');
+            // 但不显示错误，避免影响用户体验
+          }
+        }
+      } catch (e) {
+        print('获取日历本信息时出错: $e');
+      }
+      
       print('导航返回上一页，结果为true');
       // 返回上一页，并传递保存成功的标志
       if (mounted) {

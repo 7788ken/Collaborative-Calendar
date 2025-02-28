@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../models/schedule_item.dart';
 import '../../../data/schedule_service.dart';
+import '../../../data/calendar_book_manager.dart';
+import 'package:provider/provider.dart';
 
 class AddScheduleSheet extends StatefulWidget {
   final DateTime selectedDate;
@@ -254,6 +256,36 @@ class _AddScheduleSheetState extends State<AddScheduleSheet> {
       
       // 回调通知父组件
       widget.onScheduleAdded(schedule);
+      
+      // 判断是否需要同步到云端
+      final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+      try {
+        final calendarBook = calendarManager.books.firstWhere(
+          (book) => book.id == schedule.calendarId,
+          orElse: () => throw Exception('找不到日历本'),
+        );
+        
+        // 如果是共享日历，则同步到云端 - 只同步当前新增的日程
+        if (calendarBook.isShared) {
+          print('新增日程：检测到共享日历的日程变更，准备同步到云端...');
+          print('同步单条日程，ID: ${schedule.id}');
+          Future.microtask(() async {
+            try {
+              // 只同步特定的日程ID，而不是整个日历的所有日程
+              await calendarManager.syncSharedCalendarSchedules(
+                schedule.calendarId,
+                specificScheduleId: schedule.id
+              );
+              print('新增日程：云端同步完成');
+            } catch (e) {
+              print('新增日程：同步到云端时出错: $e');
+              // 但不显示错误，避免影响用户体验
+            }
+          });
+        }
+      } catch (e) {
+        print('获取日历本信息时出错: $e');
+      }
       
       // 关闭底部表单
       if (mounted) {

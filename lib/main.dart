@@ -8,7 +8,6 @@ import 'widgets/add_schedule_page.dart';
 import 'data/calendar_book_manager.dart';
 import 'data/models/calendar_book.dart';
 import 'data/schedule_data.dart'; // 添加 ScheduleData 导入
-import 'dart:math';
 
 // 添加主题状态管理类
 class ThemeProvider with ChangeNotifier {
@@ -660,29 +659,68 @@ class _MainPageState extends State<MainPage> {
               child: const Text('取消'),
             ),
             TextButton(
-              onPressed: () {
-                // 在实际应用中，这里需要调用API验证ID并获取日历信息
+              onPressed: () async {
                 if (idController.text.trim().isNotEmpty) {
+                  final shareCode = idController.text.trim();
                   final calendarManager = Provider.of<CalendarBookManager>(
                     context,
                     listen: false,
                   );
-                  // 这里为了演示，使用模拟数据
-                  final success = calendarManager.importSharedBook(
-                    idController.text.trim(),
-                    '导入的日历 - ${idController.text.substring(0, 4)}',
-                    Colors.purple,
-                    'user123',
-                  );
-
+                  
+                  // 关闭输入对话框
                   Navigator.of(context).pop();
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(success == true ? '日历导入成功' : '导入失败，该日历已存在'),
-                      duration: const Duration(seconds: 2),
-                    ),
+                  
+                  // 保存当前上下文的NavigatorState引用以安全操作
+                  final navigator = Navigator.of(context);
+                  
+                  // 显示加载对话框
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (dialogContext) {
+                      return const AlertDialog(
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text('正在从云端导入日历...'),
+                          ],
+                        ),
+                      );
+                    },
                   );
+                  
+                  try {
+                    // 调用API导入日历
+                    final success = await calendarManager.importSharedCalendarFromCloud(shareCode);
+                    
+                    // 安全地关闭加载对话框（使用捕获的navigator对象）
+                    if (navigator.mounted) navigator.pop();
+                    
+                    // 使用Future延迟以确保在UI更新后显示Snackbar
+                    Future.microtask(() {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(success ? '日历导入成功' : '导入失败，该日历已存在'),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    });
+                  } catch (e) {
+                    // 安全地关闭加载对话框（使用捕获的navigator对象）
+                    if (navigator.mounted) navigator.pop();
+                    
+                    // 使用Future延迟以确保在UI更新后显示Snackbar
+                    Future.microtask(() {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('导入失败: $e'),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    });
+                  }
                 }
               },
               child: const Text('导入'),
@@ -1227,23 +1265,14 @@ class _MainPageState extends State<MainPage> {
     final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
     
     try {
-      // 上传到云端并获取服务器返回的分享码
-      final serverShareId = await _updateCalendarToCloud(book);
-      
-      // 更新日历为已分享状态
-      final updatedBook = book.copyWith(isShared: true);
-      
-      // 更新日历共享状态和分享码
-      await calendarManager.updateSharedStatus(book.id, true);
-      
-      // 存储服务器返回的分享码
-      await calendarManager.saveShareId(book.id, serverShareId);
+      // 使用API服务上传日历到云端并获取分享码
+      final serverShareId = await calendarManager.shareCalendarToCloud(book.id);
       
       // 关闭加载对话框
       Navigator.of(context).pop();
       
       // 显示分享成功对话框（使用服务器返回的分享码）
-      _showShareCalendarSuccessDialog(context, updatedBook, serverShareId);
+      _showShareCalendarSuccessDialog(context, book, serverShareId);
     } catch (e) {
       // 关闭加载对话框
       Navigator.of(context).pop();
@@ -1253,25 +1282,6 @@ class _MainPageState extends State<MainPage> {
         SnackBar(content: Text('分享失败: $e')),
       );
     }
-  }
-  
-  // 模拟将日历上传到云端并获取分享码
-  Future<String> _updateCalendarToCloud(CalendarBook book) async {
-    // 这里应该是真实的网络请求逻辑，向后端上传日历数据
-    // 目前仅作模拟延迟
-    await Future.delayed(const Duration(milliseconds: 800));
-    
-    // 模拟可能出现的错误
-    if (Random().nextInt(10) == 0) {
-      throw Exception('网络连接错误');
-    }
-    
-    // 模拟服务器生成的分享码
-    final serverGeneratedShareId = 'S${DateTime.now().millisecondsSinceEpoch.toString().substring(5, 13)}-${book.id.substring(0, 4)}';
-    
-    print('服务器生成分享码: $serverGeneratedShareId');
-    
-    return serverGeneratedShareId;
   }
   
   // 显示分享成功对话框（使用服务器返回的分享码）
@@ -1343,3 +1353,44 @@ class _MainPageState extends State<MainPage> {
     );
   }
 }
+
+// 测试直接同步特定任务的函数
+void testSyncSpecificTask(BuildContext context) async {
+  print('开始测试直接同步特定任务');
+  
+  try {
+    // 获取日历管理器实例
+    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+    
+    // 指定任务ID和分享码
+    final String scheduleId = 'ccc39192-c5c4-4830-9699-42fa09e648fc';
+    final String shareCode = 'ccbee1b02452';
+    
+    // 将任务设置为未完成
+    final result = await calendarManager.syncSpecificTask(shareCode, scheduleId, false);
+    
+    print('同步结果: $result');
+    
+    // 显示结果
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('任务同步结果: ${result ? "成功" : "失败"}'),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  } catch (e) {
+    print('测试同步时出错: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('同步错误: $e'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+  
+  print('测试完成');
+}
+
+// 初始化providers
+// ... existing code ...

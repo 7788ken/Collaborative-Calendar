@@ -11,6 +11,7 @@ class ScheduleItem {
   final bool isAllDay;
   final String? location;
   final DateTime createdAt;
+  final bool isCompleted; // 添加任务完成状态字段
 
   ScheduleItem({
     String? id,
@@ -22,6 +23,7 @@ class ScheduleItem {
     this.isAllDay = false,
     this.location,
     DateTime? createdAt,
+    this.isCompleted = false, // 默认为未完成
   }) : 
     id = id ?? const Uuid().v4(),
     createdAt = createdAt ?? DateTime.now();
@@ -38,6 +40,7 @@ class ScheduleItem {
       isAllDay: map['is_all_day'] == 1,
       location: map['location'],
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at']),
+      isCompleted: map['is_completed'] == 1, // 从数据库读取完成状态
     );
   }
 
@@ -53,6 +56,7 @@ class ScheduleItem {
       'is_all_day': isAllDay ? 1 : 0,
       'location': location,
       'created_at': createdAt.millisecondsSinceEpoch,
+      'is_completed': isCompleted ? 1 : 0, // 存储完成状态
     };
   }
 
@@ -65,6 +69,7 @@ class ScheduleItem {
     DateTime? endTime,
     bool? isAllDay,
     String? location,
+    bool? isCompleted, // 添加完成状态字段
   }) {
     return ScheduleItem(
       id: this.id,
@@ -76,6 +81,7 @@ class ScheduleItem {
       isAllDay: isAllDay ?? this.isAllDay,
       location: location ?? this.location,
       createdAt: this.createdAt,
+      isCompleted: isCompleted ?? this.isCompleted, // 保留完成状态
     );
   }
 
@@ -88,5 +94,10 @@ class ScheduleItem {
     return (dateOnly.isAtSameMomentAs(startDateOnly) || 
             dateOnly.isAtSameMomentAs(endDateOnly) ||
             (dateOnly.isAfter(startDateOnly) && dateOnly.isBefore(endDateOnly)));
+  }
+  
+  // 切换任务完成状态
+  ScheduleItem toggleComplete() {
+    return copyWith(isCompleted: !isCompleted);
   }
 } 

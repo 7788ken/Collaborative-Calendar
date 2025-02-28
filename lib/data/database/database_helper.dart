@@ -28,8 +28,9 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDatabase,
+      onUpgrade: _upgradeDatabase,
     );
   }
   
@@ -56,9 +57,10 @@ class DatabaseHelper {
         description TEXT,
         start_time INTEGER NOT NULL,
         end_time INTEGER NOT NULL,
-        is_all_day INTEGER NOT NULL,
+        is_all_day INTEGER DEFAULT 0,
         location TEXT,
         created_at INTEGER NOT NULL,
+        is_completed INTEGER DEFAULT 0,
         FOREIGN KEY (calendar_id) REFERENCES calendars (id) ON DELETE CASCADE
       )
     ''');
@@ -86,6 +88,28 @@ class DatabaseHelper {
       'shared_with_users': '[]',
       'created_at': DateTime.now().millisecondsSinceEpoch,
     });
+  }
+  
+  // 添加数据库升级方法
+  Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
+    print('数据库升级: 从版本 $oldVersion 升级到版本 $newVersion');
+    
+    if (oldVersion < 2) {
+      // 版本1到版本2：添加is_completed列
+      print('数据库升级: 为schedules表添加is_completed列');
+      try {
+        await db.execute('ALTER TABLE schedules ADD COLUMN is_completed INTEGER DEFAULT 0');
+        print('数据库升级: is_completed列添加成功');
+      } catch (e) {
+        print('数据库升级失败: $e');
+        // 如果列已存在，SQLite会抛出错误，这里我们可以忽略
+        if (!e.toString().contains('duplicate column')) {
+          rethrow;
+        } else {
+          print('数据库升级: is_completed列已存在，跳过');
+        }
+      }
+    }
   }
   
   // ==================== 日历本操作 ====================
@@ -264,6 +288,114 @@ class DatabaseHelper {
     );
   }
   
+  // 根据ID获取日程
+  Future<List<ScheduleItem>> getScheduleById(String id) async {
+    try {
+      final db = await database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        'schedules',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      
+      if (maps.isEmpty) {
+        print('数据库助手: 未找到ID为 $id 的日程');
+        return [];
+      }
+      
+      return List.generate(maps.length, (i) {
+        return ScheduleItem(
+          id: maps[i]['id'],
+          calendarId: maps[i]['calendar_id'],
+          title: maps[i]['title'],
+          description: maps[i]['description'],
+          startTime: DateTime.fromMillisecondsSinceEpoch(maps[i]['start_time']),
+          endTime: DateTime.fromMillisecondsSinceEpoch(maps[i]['end_time']),
+          isAllDay: maps[i]['is_all_day'] == 1,
+          location: maps[i]['location'],
+          isCompleted: maps[i]['is_completed'] == 1,
+        );
+      });
+    } catch (e) {
+      print('数据库助手: 根据ID获取日程时出错: $e');
+      return [];
+    }
+  }
+  
+  // 获取最近修改的日程
+  Future<List<ScheduleItem>> getRecentlyModifiedSchedules(String calendarId) async {
+    try {
+      print('数据库助手: 开始获取最近修改的日程');
+      
+      // 检查数据库中是否有sync_status列
+      final db = await database;
+      var hasColumn = false;
+      
+      try {
+        final result = await db.rawQuery('PRAGMA table_info(schedules)');
+        hasColumn = result.any((column) => column['name'] == 'sync_status');
+      } catch (e) {
+        print('数据库助手: 检查表结构时出错: $e');
+      }
+      
+      // 如果没有sync_status列，添加它
+      if (!hasColumn) {
+        print('数据库助手: 添加sync_status列');
+        await db.execute('ALTER TABLE schedules ADD COLUMN sync_status INTEGER DEFAULT 0');
+      }
+      
+      // 获取所有需要同步的日程（sync_status = 0或null）
+      final List<Map<String, dynamic>> maps = await db.query(
+        'schedules',
+        where: 'calendar_id = ? AND (sync_status = 0 OR sync_status IS NULL)',
+        whereArgs: [calendarId],
+      );
+      
+      print('数据库助手: 找到 ${maps.length} 条需要同步的日程');
+      
+      return List.generate(maps.length, (i) => ScheduleItem.fromMap(maps[i]));
+    } catch (e) {
+      print('数据库助手: 获取最近修改的日程时出错: $e');
+      return [];
+    }
+  }
+  
+  // 更新日程同步状态
+  Future<void> updateScheduleSyncStatus(String scheduleId, bool synced) async {
+    try {
+      print('数据库助手: 更新日程同步状态, ID: $scheduleId, 状态: ${synced ? '已同步' : '未同步'}');
+      
+      final db = await database;
+      
+      // 检查数据库中是否有sync_status列
+      var hasColumn = false;
+      try {
+        final result = await db.rawQuery('PRAGMA table_info(schedules)');
+        hasColumn = result.any((column) => column['name'] == 'sync_status');
+      } catch (e) {
+        print('数据库助手: 检查表结构时出错: $e');
+      }
+      
+      // 如果没有sync_status列，添加它
+      if (!hasColumn) {
+        print('数据库助手: 添加sync_status列');
+        await db.execute('ALTER TABLE schedules ADD COLUMN sync_status INTEGER DEFAULT 0');
+      }
+      
+      // 更新同步状态
+      final updateCount = await db.update(
+        'schedules',
+        {'sync_status': synced ? 1 : 0},
+        where: 'id = ?',
+        whereArgs: [scheduleId],
+      );
+      
+      print('数据库助手: 同步状态更新成功，更新了 $updateCount 条记录');
+    } catch (e) {
+      print('数据库助手: 更新日程同步状态时出错: $e');
+    }
+  }
+  
   // ==================== 任务操作 ====================
   
   // 获取特定日历本的所有任务
@@ -307,5 +439,23 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+  
+  // 删除特定日历本中的所有日程
+  Future<int> deleteAllSchedulesInCalendar(String calendarId) async {
+    try {
+      final db = await database;
+      final count = await db.delete(
+        'schedules',
+        where: 'calendar_id = ?',
+        whereArgs: [calendarId],
+      );
+      
+      print('数据库助手: 已删除日历 $calendarId 中的 $count 条日程');
+      return count;
+    } catch (e) {
+      print('数据库助手: 删除日历中所有日程时出错: $e');
+      rethrow;
+    }
   }
 } 
