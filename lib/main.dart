@@ -8,6 +8,7 @@ import 'widgets/add_schedule_page.dart';
 import 'data/calendar_book_manager.dart';
 import 'data/models/calendar_book.dart';
 import 'data/schedule_data.dart'; // 添加 ScheduleData 导入
+import 'dart:math';
 
 // 添加主题状态管理类
 class ThemeProvider with ChangeNotifier {
@@ -180,43 +181,102 @@ class _MainPageState extends State<MainPage> {
                   onTap: () {
                     Scaffold.of(context).openDrawer();
                   },
-                  child: Row(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (currentBook != null)
-                        Icon(
-                          Icons.book,
-                          color: currentBook.color,
-                          size: 20,
-                        ),
-                      const SizedBox(width: 8),
-                      if (currentBook != null)
-                        Text(
-                          currentBook.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      if (currentBook?.isShared == true)
-                        Container(
-                          margin: const EdgeInsets.only(left: 4),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: currentBook!.color.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '共享',
-                            style: TextStyle(
-                              fontSize: 10,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (currentBook != null)
+                            Icon(
+                              Icons.book,
                               color: currentBook.color,
+                              size: 20,
                             ),
-                          ),
+                          const SizedBox(width: 8),
+                          if (currentBook != null)
+                            Text(
+                              currentBook.name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                      if (currentBook != null)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!currentBook.isShared)
+                              Container(
+                                margin: const EdgeInsets.only(top: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  '本地日历',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                                ),
+                              )
+                            else
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      '云端日历',
+                                      style: TextStyle(fontSize: 10, color: Colors.blue),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  GestureDetector(
+                                    onTap: () {
+                                      _showShareCalendarDialog(context, currentBook);
+                                    },
+                                    child: Container(
+                                      margin: const EdgeInsets.only(top: 2),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        '分享',
+                                        style: TextStyle(fontSize: 10, color: Colors.blue),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            if (!currentBook.isShared) 
+                              GestureDetector(
+                                onTap: () {
+                                  _shareCalendar(context, currentBook);
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(left: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    '分享',
+                                    style: TextStyle(fontSize: 10, color: Colors.blue),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                     ],
                   ),
@@ -364,14 +424,64 @@ class _MainPageState extends State<MainPage> {
                 (book) => ListTile(
                   leading: Icon(Icons.book, color: book.color),
                   title: Text(book.name),
-                  subtitle:
-                      book.isShared
-                          ? const Text('共享日历', style: TextStyle(fontSize: 12))
-                          : null,
-                  trailing:
-                      book.id == currentBook?.id
-                          ? const Icon(Icons.check, color: Colors.green)
-                          : null,
+                  subtitle: Row(
+                    children: [
+                      if (!book.isShared)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            '本地日历',
+                            style: TextStyle(fontSize: 10, color: Colors.grey),
+                          ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                '云端日历',
+                                style: TextStyle(fontSize: 10, color: Colors.blue),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '分享码: ${calendarManager.getShareId(book.id)}',
+                              style: TextStyle(fontSize: 10, color: Colors.blue.shade700),
+                            ),
+                          ],
+                        ),
+                      if (!book.isShared)
+                        GestureDetector(
+                          onTap: () {
+                            _shareCalendar(context, book);
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              '分享',
+                              style: TextStyle(fontSize: 10, color: Colors.blue),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  trailing: book.id == currentBook?.id
+                      ? const Icon(Icons.check, color: Colors.green)
+                      : null,
                   onTap: () {
                     calendarManager.setActiveBook(book.id);
                     Navigator.pop(context);
@@ -604,6 +714,14 @@ class _MainPageState extends State<MainPage> {
                   _showEditCalendarDialog(context, book);
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.copy, color: Colors.green),
+                title: const Text('复制到新的本地日历'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _copyToNewLocalCalendar(context, book);
+                },
+              ),
               if (!book.isShared)
                 ListTile(
                   leading: const Icon(Icons.share, color: Colors.blue),
@@ -624,6 +742,157 @@ class _MainPageState extends State<MainPage> {
                 ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  // 复制到新的本地日历
+  void _copyToNewLocalCalendar(BuildContext context, CalendarBook sourceBook) {
+    final nameController = TextEditingController(text: '${sourceBook.name} 副本');
+    Color selectedColor = sourceBook.color;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('复制到新日历'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '将创建一个新的本地日历，复制"${sourceBook.name}"中的所有日程',
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: '新日历名称',
+                      hintText: '输入新日历名称',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('选择颜色:'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children:
+                        [
+                              Colors.red,
+                              Colors.pink,
+                              Colors.purple,
+                              Colors.deepPurple,
+                              Colors.indigo,
+                              Colors.blue,
+                              Colors.lightBlue,
+                              Colors.cyan,
+                              Colors.teal,
+                              Colors.green,
+                              Colors.lightGreen,
+                              Colors.lime,
+                              Colors.yellow,
+                              Colors.amber,
+                              Colors.orange,
+                              Colors.deepOrange,
+                            ]
+                            .map(
+                              (color) => GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    selectedColor = color;
+                                  });
+                                },
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  margin: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border:
+                                        selectedColor == color
+                                            ? Border.all(
+                                              color: Colors.black,
+                                              width: 2,
+                                            )
+                                            : null,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (nameController.text.trim().isNotEmpty) {
+                      Navigator.of(context).pop();
+                      
+                      // 显示加载提示
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (BuildContext context) {
+                          return const AlertDialog(
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text('正在复制日历内容...'),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                      
+                      try {
+                        final calendarManager = Provider.of<CalendarBookManager>(
+                          context,
+                          listen: false,
+                        );
+                        
+                        // 复制日历
+                        await calendarManager.copyCalendarBook(
+                          sourceBook.id,
+                          nameController.text.trim(),
+                          selectedColor,
+                        );
+                        
+                        // 关闭加载对话框
+                        Navigator.of(context).pop();
+                        
+                        // 显示成功提示
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('日历"${nameController.text.trim()}"创建成功')),
+                        );
+                      } catch (e) {
+                        // 关闭加载对话框
+                        Navigator.of(context).pop();
+                        
+                        // 显示错误提示
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('复制日历失败: $e')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('创建'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -709,18 +978,58 @@ class _MainPageState extends State<MainPage> {
                   child: const Text('取消'),
                 ),
                 TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (nameController.text.trim().isNotEmpty) {
                       final calendarManager = Provider.of<CalendarBookManager>(
                         context,
                         listen: false,
                       );
-                      calendarManager.updateBookName(
-                        book.id,
-                        nameController.text.trim(),
+                      
+                      // 显示加载指示器
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (BuildContext context) {
+                          return const AlertDialog(
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text('正在保存...'),
+                              ],
+                            ),
+                          );
+                        },
                       );
-                      calendarManager.updateBookColor(book.id, selectedColor);
-                      Navigator.of(context).pop();
+                      
+                      try {
+                        // 使用新方法同时更新名称和颜色
+                        await calendarManager.updateBookNameAndColor(
+                          book.id,
+                          nameController.text.trim(),
+                          selectedColor
+                        );
+                        
+                        // 关闭加载对话框
+                        Navigator.of(context).pop();
+                        
+                        // 关闭编辑对话框
+                        Navigator.of(context).pop();
+                        
+                        // 显示成功消息
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('日历已更新')),
+                        );
+                      } catch (e) {
+                        // 关闭加载对话框
+                        Navigator.of(context).pop();
+                        
+                        // 显示错误消息
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('更新失败: $e')),
+                        );
+                      }
                     }
                   },
                   child: const Text('保存'),
@@ -764,7 +1073,7 @@ class _MainPageState extends State<MainPage> {
                   children: [
                     Expanded(
                       child: SelectableText(
-                        shareId,
+                        shareId ?? '未找到分享码',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -825,6 +1134,208 @@ class _MainPageState extends State<MainPage> {
                 ).showSnackBar(const SnackBar(content: Text('日历已删除')));
               },
               child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // 分享日历功能
+  Future<void> _shareCalendar(BuildContext context, CalendarBook book) async {
+    // 添加二次确认对话框
+    bool shouldProceed = await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('确认分享日历'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.cloud_upload_outlined, 
+                color: Colors.blue, 
+                size: 48
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '您即将将"${book.name}"从本地日历上传到云端',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '上传后：',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text('• 此日历将变为云端日历'),
+              const Text('• 拥有分享码的所有人可以查看和编辑此日历中的日程'),
+              const Text('• 所有修改将在共享用户之间同步'),
+              const SizedBox(height: 12),
+              const Text(
+                '确定要分享此日历吗？',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(false); // 取消
+              },
+              child: const Text('取消'),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.of(context).pop(true); // 确认
+              },
+              child: const Text('确认分享'),
+            ),
+          ],
+        );
+      },
+    ) ?? false;
+    
+    if (!shouldProceed) {
+      return; // 用户取消了分享
+    }
+    
+    // 显示加载提示
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('正在将日历上传至云端...'),
+            ],
+          ),
+        );
+      },
+    );
+    
+    // 将日历标记为已分享
+    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+    
+    try {
+      // 上传到云端并获取服务器返回的分享码
+      final serverShareId = await _updateCalendarToCloud(book);
+      
+      // 更新日历为已分享状态
+      final updatedBook = book.copyWith(isShared: true);
+      
+      // 更新日历共享状态和分享码
+      await calendarManager.updateSharedStatus(book.id, true);
+      
+      // 存储服务器返回的分享码
+      await calendarManager.saveShareId(book.id, serverShareId);
+      
+      // 关闭加载对话框
+      Navigator.of(context).pop();
+      
+      // 显示分享成功对话框（使用服务器返回的分享码）
+      _showShareCalendarSuccessDialog(context, updatedBook, serverShareId);
+    } catch (e) {
+      // 关闭加载对话框
+      Navigator.of(context).pop();
+      
+      // 显示错误提示
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('分享失败: $e')),
+      );
+    }
+  }
+  
+  // 模拟将日历上传到云端并获取分享码
+  Future<String> _updateCalendarToCloud(CalendarBook book) async {
+    // 这里应该是真实的网络请求逻辑，向后端上传日历数据
+    // 目前仅作模拟延迟
+    await Future.delayed(const Duration(milliseconds: 800));
+    
+    // 模拟可能出现的错误
+    if (Random().nextInt(10) == 0) {
+      throw Exception('网络连接错误');
+    }
+    
+    // 模拟服务器生成的分享码
+    final serverGeneratedShareId = 'S${DateTime.now().millisecondsSinceEpoch.toString().substring(5, 13)}-${book.id.substring(0, 4)}';
+    
+    print('服务器生成分享码: $serverGeneratedShareId');
+    
+    return serverGeneratedShareId;
+  }
+  
+  // 显示分享成功对话框（使用服务器返回的分享码）
+  void _showShareCalendarSuccessDialog(BuildContext context, CalendarBook book, String serverShareId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('分享日历成功'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.check_circle_outline,
+                color: Colors.green,
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '"${book.name}" 已成功上传到云端',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              const Text('将此分享码分享给好友，他们可以导入并查看此日历:'),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.blue.shade50,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        serverShareId,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy),
+                      onPressed: () {
+                        // 在实际应用中，这里应该调用剪贴板API
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('已复制到剪贴板')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('关闭'),
             ),
           ],
         );
