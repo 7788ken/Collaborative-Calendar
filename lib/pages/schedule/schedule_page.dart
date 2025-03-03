@@ -366,17 +366,7 @@ class _SchedulePageState extends State<SchedulePage>
                           getScheduleCountForDate: _getCompletedScheduleCountForDate,
                         ),
 
-                        // 添加测试按钮
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: FloatingActionButton(
-                            mini: true,
-                            backgroundColor: Colors.red,
-                            child: const Icon(Icons.sync, color: Colors.white),
-                            onPressed: () => _testSyncSpecificTask(),
-                          ),
-                        ),
+                         
 
                         // 使用 DraggableScrollableSheet 替代自定义面板
                         DraggableScrollableSheet(

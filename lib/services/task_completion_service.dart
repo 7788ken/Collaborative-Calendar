@@ -34,28 +34,37 @@ class TaskCompletionService {
     ScheduleItem schedule,
     {VoidCallback? onStateChanged}
   ) async {
+    // 获取 BuildContext 的状态
+    final state = context.findAncestorStateOfType<State>();
+    if (state == null || !state.mounted) {
+      print('任务完成状态服务：组件已销毁，取消操作');
+      return;
+    }
+    
     // 添加振动反馈
     HapticFeedback.lightImpact();
     
     // 创建一个唯一的任务键
     final String taskKey = '${schedule.startTime.year}-${schedule.startTime.month}-${schedule.startTime.day}-${schedule.id}';
     
-    // 获取 ScheduleData Provider
-    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
-    
-    // 获取当前状态
-    final currentStatus = scheduleData.getTaskCompletionStatus(taskKey);
-    
-    // 更新为相反的状态
-    final newStatus = !currentStatus;
-    scheduleData.updateTaskCompletionStatus(taskKey, newStatus);
-    
-    // 更新数据库中的任务完成状态
-    await _updateScheduleCompletionInDatabase(schedule, newStatus);
-    
-    // 获取日历管理器判断是否需要同步到云端
-    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
     try {
+      // 获取 ScheduleData Provider
+      final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+      
+      // 获取当前状态
+      final currentStatus = scheduleData.getTaskCompletionStatus(taskKey);
+      
+      // 更新为相反的状态
+      final newStatus = !currentStatus;
+      scheduleData.updateTaskCompletionStatus(taskKey, newStatus);
+      
+      // 更新数据库中的任务完成状态
+      await _updateScheduleCompletionInDatabase(schedule, newStatus);
+      
+      // 获取日历管理器判断是否需要同步到云端
+      if (!state.mounted) return;
+      
+      final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
       final calendarBook = calendarManager.books.firstWhere(
         (book) => book.id == schedule.calendarId,
         orElse: () => throw Exception('找不到日历本'),
@@ -73,19 +82,23 @@ class TaskCompletionService {
           print('任务完成状态服务：云端同步完成');
         } catch (e) {
           print('任务完成状态服务：同步到云端时出错: $e');
-          // 但不显示错误，避免影响用户体验
         }
       }
+      
+      // 再次检查组件状态
+      if (state.mounted && onStateChanged != null) {
+        onStateChanged();
+      }
+      
+      print('任务"${schedule.title}"的完成状态已切换为: $newStatus, 键值: $taskKey');
     } catch (e) {
-      print('获取日历本信息时出错: $e');
+      print('任务完成状态切换时出错: $e');
+      if (state.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败：$e'))
+        );
+      }
     }
-    
-    // 调用状态变更回调
-    if (onStateChanged != null) {
-      onStateChanged();
-    }
-    
-    print('任务"${schedule.title}"的完成状态已切换为: $newStatus, 键值: $taskKey');
   }
   
   // 更新数据库中任务的完成状态

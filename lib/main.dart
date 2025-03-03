@@ -165,7 +165,7 @@ class _MainPageState extends State<MainPage> {
               onPressed: () {
                 Scaffold.of(context).openDrawer();
               },
-            );
+            );// 添加日历本切换按钮
           },
         ),
         title: Builder(
@@ -350,7 +350,7 @@ class _MainPageState extends State<MainPage> {
                   }
                 });
               },
-            ),
+            ),// 添加日程按钮
         ],
       ),
       drawer: _buildCalendarDrawer(context),
@@ -1123,7 +1123,7 @@ class _MainPageState extends State<MainPage> {
                           const SnackBar(content: Text('已复制到剪贴板')),
                         );
                       },
-                    ),
+                    ),// 添加分享按钮
                   ],
                 ),
               ),
