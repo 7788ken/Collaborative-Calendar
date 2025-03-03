@@ -8,10 +8,7 @@ import 'package:uuid/uuid.dart';
 class AddSchedulePage extends StatefulWidget {
   final ScheduleItem? scheduleItem;
 
-  const AddSchedulePage({
-    super.key,
-    this.scheduleItem,
-  });
+  const AddSchedulePage({super.key, this.scheduleItem});
 
   @override
   State<AddSchedulePage> createState() => _AddSchedulePageState();
@@ -20,7 +17,7 @@ class AddSchedulePage extends StatefulWidget {
 class _AddSchedulePageState extends State<AddSchedulePage> {
   // 添加表单Key用于验证
   final _formKey = GlobalKey<FormState>();
-  
+
   late DateTime _selectedDate;
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
@@ -29,7 +26,7 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
   late final TextEditingController _locationController;
   bool _isAllDay = false;
   bool _isSaving = false;
-  
+
   // 日程服务
   final ScheduleService _scheduleService = ScheduleService();
 
@@ -53,7 +50,9 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         minute: item.endTime.minute,
       );
       _titleController = TextEditingController(text: item.title);
-      _descriptionController = TextEditingController(text: item.description ?? '');
+      _descriptionController = TextEditingController(
+        text: item.description ?? '',
+      );
       _locationController = TextEditingController(text: item.location ?? '');
       _isAllDay = item.isAllDay == 1;
     } else {
@@ -62,8 +61,13 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       _startTime = TimeOfDay.now();
       // 默认结束时间为开始时间后1小时
       final now = DateTime.now();
-      final endTime = DateTime(now.year, now.month, now.day, 
-                               now.hour + 1, now.minute);
+      final endTime = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        now.hour + 1,
+        now.minute,
+      );
       _endTime = TimeOfDay(hour: endTime.hour, minute: endTime.minute);
       _titleController = TextEditingController();
       _descriptionController = TextEditingController();
@@ -119,8 +123,8 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
 
   // 检查时间1是否晚于时间2
   bool _isTimeAfter(TimeOfDay time1, TimeOfDay time2) {
-    return time1.hour > time2.hour || 
-          (time1.hour == time2.hour && time1.minute >= time2.minute);
+    return time1.hour > time2.hour ||
+        (time1.hour == time2.hour && time1.minute >= time2.minute);
   }
 
   Future<bool> _saveToDatabase() async {
@@ -135,68 +139,73 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
     try {
       // 获取日历管理器
       final calendarManager = Provider.of<CalendarBookManager>(
-        context, 
-        listen: false
+        context,
+        listen: false,
       );
-      
+
       // 创建日程项
-      final newSchedule = widget.scheduleItem == null
-          ? ScheduleItem(
-              id: Uuid().v4(),
-              calendarId: calendarManager.activeBook!.id,
-              title: _titleController.text.trim(),
-              startTime: DateTime(
-                _selectedDate.year,
-                _selectedDate.month,
-                _selectedDate.day,
-                _startTime.hour,
-                _startTime.minute,
-              ),
-              endTime: DateTime(
-                _selectedDate.year,
-                _selectedDate.month,
-                _selectedDate.day,
-                _endTime.hour,
-                _endTime.minute,
-              ),
-              isAllDay: _isAllDay,
-              description: _descriptionController.text.isEmpty
-                  ? null
-                  : _descriptionController.text.trim(),
-              location: _locationController.text.isEmpty
-                  ? null
-                  : _locationController.text.trim(),
-            )
-          : widget.scheduleItem!.copyWith(
-              title: _titleController.text.trim(),
-              startTime: DateTime(
-                _selectedDate.year,
-                _selectedDate.month,
-                _selectedDate.day,
-                _startTime.hour,
-                _startTime.minute,
-              ),
-              endTime: DateTime(
-                _selectedDate.year,
-                _selectedDate.month,
-                _selectedDate.day,
-                _endTime.hour,
-                _endTime.minute,
-              ),
-              isAllDay: _isAllDay,
-              description: _descriptionController.text.isEmpty
-                  ? null
-                  : _descriptionController.text.trim(),
-              location: _locationController.text.isEmpty
-                  ? null
-                  : _locationController.text.trim(),
-            );
-      
+      final newSchedule =
+          widget.scheduleItem == null
+              ? ScheduleItem(
+                id: Uuid().v4(),
+                calendarId: calendarManager.activeBook!.id,
+                title: _titleController.text.trim(),
+                startTime: DateTime(
+                  _selectedDate.year,
+                  _selectedDate.month,
+                  _selectedDate.day,
+                  _startTime.hour,
+                  _startTime.minute,
+                ),
+                endTime: DateTime(
+                  _selectedDate.year,
+                  _selectedDate.month,
+                  _selectedDate.day,
+                  _endTime.hour,
+                  _endTime.minute,
+                ),
+                isAllDay: _isAllDay,
+                description:
+                    _descriptionController.text.isEmpty
+                        ? null
+                        : _descriptionController.text.trim(),
+                location:
+                    _locationController.text.isEmpty
+                        ? null
+                        : _locationController.text.trim(),
+              )
+              : widget.scheduleItem!.copyWith(
+                title: _titleController.text.trim(),
+                startTime: DateTime(
+                  _selectedDate.year,
+                  _selectedDate.month,
+                  _selectedDate.day,
+                  _startTime.hour,
+                  _startTime.minute,
+                ),
+                endTime: DateTime(
+                  _selectedDate.year,
+                  _selectedDate.month,
+                  _selectedDate.day,
+                  _endTime.hour,
+                  _endTime.minute,
+                ),
+                isAllDay: _isAllDay,
+                description:
+                    _descriptionController.text.isEmpty
+                        ? null
+                        : _descriptionController.text.trim(),
+                location:
+                    _locationController.text.isEmpty
+                        ? null
+                        : _locationController.text.trim(),
+              );
+
       // 添加调试输出
       print('准备保存日程: ${newSchedule.title}');
       print('日程ID: ${newSchedule.id}');
       print('日程详细信息: ${newSchedule.toMap()}');
-      
+
       // 保存到数据库
       if (widget.scheduleItem == null) {
         // 新增日程
@@ -207,9 +216,9 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         } catch (e) {
           print('日程添加失败: $e');
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('添加失败: ${e.toString()}')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('添加失败: ${e.toString()}')));
           }
           setState(() {
             _isSaving = false;
@@ -227,9 +236,9 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         } catch (e) {
           print('日程更新失败: $e');
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('更新失败: ${e.toString()}')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('更新失败: ${e.toString()}')));
           }
           setState(() {
             _isSaving = false;
@@ -237,24 +246,24 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
           return false;
         }
       }
-      
+
       // 判断是否需要同步到云端
       try {
         final calendarBook = calendarManager.books.firstWhere(
           (book) => book.id == newSchedule.calendarId,
           orElse: () => throw Exception('找不到日历本'),
         );
-        
+
         // 如果是共享日历，则同步到云端（只同步当前修改的日程）
         if (calendarBook.isShared) {
           print('日程页面：检测到共享日历的日程变更，准备同步到云端...');
           print('同步单条日程，ID: ${newSchedule.id}');
-          
+
           try {
             // 只同步特定的日程ID，而不是整个日历的所有日程
             await calendarManager.syncSharedCalendarSchedules(
               newSchedule.calendarId,
-              specificScheduleId: newSchedule.id
+              specificScheduleId: newSchedule.id,
             );
             print('日程页面：云端同步完成');
           } catch (e) {
@@ -265,7 +274,7 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       } catch (e) {
         print('获取日历本信息时出错: $e');
       }
-      
+
       print('添加日程返回结果为true，准备刷新页面');
       // 返回上一页，并传递保存成功的标志
       if (mounted) {
@@ -277,9 +286,9 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
     } catch (e) {
       print('保存日程时出错: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
       }
       setState(() {
         _isSaving = false;
@@ -311,16 +320,12 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         elevation: 0,
         title: Text(
           widget.scheduleItem == null ? '添加日程' : '编辑日程',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-          ),
+          style: TextStyle(color: Theme.of(context).colorScheme.primary),
         ),
-        iconTheme: IconThemeData(
-          color: Theme.of(context).colorScheme.primary,
-        ),
+        iconTheme: IconThemeData(color: Theme.of(context).colorScheme.primary),
         actions: [
           _isSaving
-            ? Padding(
+              ? Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: SizedBox(
                   width: 24,
@@ -333,10 +338,10 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
                   ),
                 ),
               )
-            : TextButton(
+              : TextButton(
                 onPressed: _saveToDatabase,
                 child: Text(
-                  '保存',
+                  widget.scheduleItem == null ? '保存' : '修改',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
                   ),
@@ -388,8 +393,10 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
                     },
                     activeColor: Theme.of(context).colorScheme.primary,
                   ),
-                  Text(_isAllDay ? '是' : '否', 
-                       style: const TextStyle(fontSize: 16)),
+                  Text(
+                    _isAllDay ? '是' : '否',
+                    style: const TextStyle(fontSize: 16),
+                  ),
                 ],
               ),
               const Divider(),
@@ -494,4 +501,4 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       ),
     );
   }
-} 
+}
