@@ -103,6 +103,17 @@ class ScheduleService {
     }
   }
 
+  // 根据ID获取日程
+  Future<List<ScheduleItem>> getScheduleById(String id) async {
+    try {
+      print('ScheduleService: 通过ID查询日程, ID=$id');
+      return await _dbHelper.getScheduleById(id);
+    } catch (e) {
+      print('ScheduleService: 根据ID查询日程时出错: $e');
+      return [];
+    }
+  }
+
   // 删除日程
   Future<void> deleteSchedule(String id) async {
     try {

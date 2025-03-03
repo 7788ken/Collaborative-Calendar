@@ -242,9 +242,27 @@ class DatabaseHelper {
   Future<void> updateSchedule(ScheduleItem schedule) async {
     try {
       print('数据库助手: 开始更新日程 ${schedule.title}，ID: ${schedule.id}');
+      print('数据库助手: 日程所属日历本ID: ${schedule.calendarId}');
       print('数据库助手: 更新的日程详情：${schedule.toMap()}');
       
+      // 查询原始记录，用于比较
       final db = await database;
+      final originalRecords = await db.query(
+        'schedules',
+        where: 'id = ?',
+        whereArgs: [schedule.id],
+      );
+      
+      if (originalRecords.isNotEmpty) {
+        final originalCalendarId = originalRecords.first['calendar_id'];
+        print('数据库助手: 原始日程所属日历本ID: $originalCalendarId');
+        print('数据库助手: 新日程所属日历本ID: ${schedule.calendarId}');
+        
+        if (originalCalendarId != schedule.calendarId) {
+          print('数据库助手: 警告! 日历本ID发生变化! 原ID=$originalCalendarId, 新ID=${schedule.calendarId}');
+        }
+      }
+      
       final updateCount = await db.update(
         'schedules',
         schedule.toMap(),

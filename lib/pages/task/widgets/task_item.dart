@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../data/models/schedule_item.dart';
 import '../../../widgets/add_schedule_page.dart';
 import '../../../models/schedule_item.dart' as calendar_models;
+import '../../../data/calendar_book_manager.dart';
 
 class TaskItemWidget extends StatefulWidget {
   final ScheduleItem item;
@@ -140,8 +141,13 @@ class _TaskItemWidgetState extends State<TaskItemWidget> with SingleTickerProvid
                     GestureDetector(
                       onTap: () {
                         _closeSlide();
+                        // 添加当前活动日历本ID
+                        final calendarManager = CalendarBookManager();  // 获取日历管理器实例
+                        final activeCalendarId = calendarManager.activeBook?.id ?? 'default';
+                        print('编辑任务，使用当前活动日历本ID: $activeCalendarId');
                         widget.onEdit(widget.item.toCalendarSchedule(
-                          id: widget.originalId, 
+                          id: widget.originalId,
+                          calendarId: activeCalendarId,  // 使用当前活动日历本ID
                         ));
                       },
                       child: Container(

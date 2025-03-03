@@ -22,9 +22,10 @@ class ScheduleItem {
   
   // 将任务项转换为日历日程项
   calendar_models.ScheduleItem toCalendarSchedule({
-    String calendarId = 'default',
+    required String calendarId,
     String? id,
   }) {
+    print('将任务项转换为日历日程项，使用指定的日历本ID: $calendarId');
     return calendar_models.ScheduleItem(
       id: id,
       calendarId: calendarId,

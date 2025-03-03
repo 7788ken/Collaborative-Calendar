@@ -36,6 +36,14 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
     // 如果是编辑模式，使用现有数据初始化
     if (widget.scheduleItem != null) {
       final item = widget.scheduleItem!;
+      // 添加调试日志，显示传入的日程项信息
+      print('编辑模式: 接收到的日程项信息:');
+      print('  ID: ${item.id}');
+      print('  标题: ${item.title}');
+      print('  日历本ID: ${item.calendarId}');
+      print('  开始时间: ${item.startTime}');
+      print('  结束时间: ${item.endTime}');
+      
       _selectedDate = DateTime(
         item.startTime.year,
         item.startTime.month,
@@ -143,146 +151,20 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         listen: false,
       );
 
-      // 创建日程项
-      final newSchedule =
-          widget.scheduleItem == null
-              ? ScheduleItem(
-                id: Uuid().v4(),
-                calendarId: calendarManager.activeBook!.id,
-                title: _titleController.text.trim(),
-                startTime: DateTime(
-                  _selectedDate.year,
-                  _selectedDate.month,
-                  _selectedDate.day,
-                  _startTime.hour,
-                  _startTime.minute,
-                ),
-                endTime: DateTime(
-                  _selectedDate.year,
-                  _selectedDate.month,
-                  _selectedDate.day,
-                  _endTime.hour,
-                  _endTime.minute,
-                ),
-                isAllDay: _isAllDay,
-                description:
-                    _descriptionController.text.isEmpty
-                        ? null
-                        : _descriptionController.text.trim(),
-                location:
-                    _locationController.text.isEmpty
-                        ? null
-                        : _locationController.text.trim(),
-              )
-              : widget.scheduleItem!.copyWith(
-                title: _titleController.text.trim(),
-                startTime: DateTime(
-                  _selectedDate.year,
-                  _selectedDate.month,
-                  _selectedDate.day,
-                  _startTime.hour,
-                  _startTime.minute,
-                ),
-                endTime: DateTime(
-                  _selectedDate.year,
-                  _selectedDate.month,
-                  _selectedDate.day,
-                  _endTime.hour,
-                  _endTime.minute,
-                ),
-                isAllDay: _isAllDay,
-                description:
-                    _descriptionController.text.isEmpty
-                        ? null
-                        : _descriptionController.text.trim(),
-                location:
-                    _locationController.text.isEmpty
-                        ? null
-                        : _locationController.text.trim(),
-              );
+      // 添加调试日志，显示当前活动日历本和要编辑的日程日历本
+      if (widget.scheduleItem != null) {
+        print('编辑日程: 当前活动日历本ID=${calendarManager.activeBook!.id}');
+        print('编辑日程: 原始日程所属日历本ID=${widget.scheduleItem!.calendarId}');
+      }
 
-      // 添加调试输出
-      print('准备保存日程: ${newSchedule.title}');
-      print('日程ID: ${newSchedule.id}');
-      print('日程详细信息: ${newSchedule.toMap()}');
-
-      // 保存到数据库
+      // 根据是新建还是编辑选择不同的处理逻辑
       if (widget.scheduleItem == null) {
-        // 新增日程
-        print('调用添加日程方法');
-        try {
-          await _scheduleService.addSchedule(newSchedule);
-          print('日程添加成功');
-        } catch (e) {
-          print('日程添加失败: $e');
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('添加失败: ${e.toString()}')));
-          }
-          setState(() {
-            _isSaving = false;
-          });
-          return false;
-        }
+        // 新建日程
+        return await _createNewSchedule(calendarManager);
       } else {
-        // 更新现有日程
-        print('调用更新日程方法');
-        print('原始日程ID: ${widget.scheduleItem!.id}');
-        print('更新后日程ID: ${newSchedule.id}');
-        try {
-          await _scheduleService.updateSchedule(newSchedule);
-          print('日程更新成功');
-        } catch (e) {
-          print('日程更新失败: $e');
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('更新失败: ${e.toString()}')));
-          }
-          setState(() {
-            _isSaving = false;
-          });
-          return false;
-        }
+        // 编辑现有日程
+        return await _updateExistingSchedule(calendarManager);
       }
-
-      // 判断是否需要同步到云端
-      try {
-        final calendarBook = calendarManager.books.firstWhere(
-          (book) => book.id == newSchedule.calendarId,
-          orElse: () => throw Exception('找不到日历本'),
-        );
-
-        // 如果是共享日历，则同步到云端（只同步当前修改的日程）
-        if (calendarBook.isShared) {
-          print('日程页面：检测到共享日历的日程变更，准备同步到云端...');
-          print('同步单条日程，ID: ${newSchedule.id}');
-
-          try {
-            // 只同步特定的日程ID，而不是整个日历的所有日程
-            await calendarManager.syncSharedCalendarSchedules(
-              newSchedule.calendarId,
-              specificScheduleId: newSchedule.id,
-            );
-            print('日程页面：云端同步完成');
-          } catch (e) {
-            print('日程页面：同步到云端时出错: $e');
-            // 但不显示错误，避免影响用户体验
-          }
-        }
-      } catch (e) {
-        print('获取日历本信息时出错: $e');
-      }
-
-      print('添加日程返回结果为true，准备刷新页面');
-      // 返回上一页，并传递保存成功的标志
-      if (mounted) {
-        // 使用单一的true值作为结果，让调用方知道操作成功
-        // 但不在这里直接触发多次刷新
-        Navigator.pop(context, true);
-      }
-      return true;
     } catch (e) {
       print('保存日程时出错: $e');
       if (mounted) {
@@ -295,6 +177,231 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       });
       return false;
     }
+  }
+
+  // 创建新日程
+  Future<bool> _createNewSchedule(CalendarBookManager calendarManager) async {
+    try {
+      // 创建新日程项
+      final newSchedule = ScheduleItem(
+        id: Uuid().v4(),
+        calendarId: calendarManager.activeBook!.id,
+        title: _titleController.text.trim(),
+        startTime: DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          _startTime.hour,
+          _startTime.minute,
+        ),
+        endTime: DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          _endTime.hour,
+          _endTime.minute,
+        ),
+        isAllDay: _isAllDay,
+        description:
+            _descriptionController.text.isEmpty
+                ? null
+                : _descriptionController.text.trim(),
+        location:
+            _locationController.text.isEmpty
+                ? null
+                : _locationController.text.trim(),
+      );
+
+      // 添加调试输出
+      print('准备创建新日程: ${newSchedule.title}');
+      print('日程ID: ${newSchedule.id}');
+      print('日程所属日历本ID: ${newSchedule.calendarId}');
+      print('日程详细信息: ${newSchedule.toMap()}');
+
+      // 保存到数据库
+      print('调用添加日程方法');
+      try {
+        await _scheduleService.addSchedule(newSchedule);
+        print('日程添加成功');
+      } catch (e) {
+        print('日程添加失败: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('添加失败: ${e.toString()}')));
+        }
+        setState(() {
+          _isSaving = false;
+        });
+        return false;
+      }
+      
+      // 判断是否需要同步到云端
+      await _syncToCloudIfNeeded(calendarManager, newSchedule);
+      
+      // 返回上一页
+      return _finishAndReturnSuccess();
+    } catch (e) {
+      print('创建新日程时出错: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('创建失败: $e')));
+      }
+      setState(() {
+        _isSaving = false;
+      });
+      return false;
+    }
+  }
+
+  // 更新现有日程
+  Future<bool> _updateExistingSchedule(CalendarBookManager calendarManager) async {
+    try {
+      // 确保使用原始日程的ID和日历本ID
+      final originalItem = widget.scheduleItem!;
+      
+      // 首先从数据库中查询该日程的真实信息，确保获取正确的日历本ID
+      final scheduleId = originalItem.id;
+      print('从数据库查询日程的真实信息, ID: $scheduleId');
+      
+      final dbSchedules = await _scheduleService.getScheduleById(scheduleId);
+      if (dbSchedules.isEmpty) {
+        print('错误: 在数据库中未找到ID为 $scheduleId 的日程');
+        throw Exception('在数据库中未找到该日程');
+      }
+      
+      final dbSchedule = dbSchedules.first;
+      final realCalendarId = dbSchedule.calendarId;
+      
+      print('数据库中的日程信息:');
+      print('  - ID: ${dbSchedule.id}');
+      print('  - 标题: ${dbSchedule.title}');
+      print('  - 日历本ID: $realCalendarId');
+      print('  - 传入的日历本ID: ${originalItem.calendarId}');
+      
+      if (realCalendarId != originalItem.calendarId) {
+        print('警告: 传入的日历本ID与数据库中的不一致!');
+      }
+      
+      // 创建更新后的日程项，显式强制使用数据库中的日历本ID
+      print('创建更新后的日程项，强制使用数据库中的日历本ID: $realCalendarId');
+      final updatedSchedule = ScheduleItem(
+        id: scheduleId,  // 保持原ID
+        calendarId: realCalendarId,  // 强制使用数据库中的日历本ID
+        title: _titleController.text.trim(),
+        startTime: DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          _startTime.hour,
+          _startTime.minute,
+        ),
+        endTime: DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          _endTime.hour,
+          _endTime.minute,
+        ),
+        isAllDay: _isAllDay,
+        description:
+            _descriptionController.text.isEmpty
+                ? null
+                : _descriptionController.text.trim(),
+        location:
+            _locationController.text.isEmpty
+                ? null
+                : _locationController.text.trim(),
+        createdAt: dbSchedule.createdAt,  // 使用数据库中的创建时间
+        isCompleted: dbSchedule.isCompleted, // 使用数据库中的完成状态
+      );
+
+      // 添加调试输出
+      print('准备更新日程: ${updatedSchedule.title}');
+      print('日程ID: ${updatedSchedule.id}');
+      print('日程所属日历本ID(更新前确认): ${updatedSchedule.calendarId}');
+      print('强制确认日历本ID是否为数据库中的ID: ${updatedSchedule.calendarId == realCalendarId}');
+      print('日程详细信息: ${updatedSchedule.toMap()}');
+
+      // 保存到数据库
+      print('调用更新日程方法');
+      print('原始日程ID: ${dbSchedule.id}');
+      print('更新后日程ID: ${updatedSchedule.id}');
+      try {
+        await _scheduleService.updateSchedule(updatedSchedule);
+        print('日程更新成功');
+      } catch (e) {
+        print('日程更新失败: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('更新失败: ${e.toString()}')));
+        }
+        setState(() {
+          _isSaving = false;
+        });
+        return false;
+      }
+
+      // 判断是否需要同步到云端
+      await _syncToCloudIfNeeded(calendarManager, updatedSchedule);
+      
+      // 返回上一页
+      return _finishAndReturnSuccess();
+    } catch (e) {
+      print('更新日程时出错: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('更新失败: $e')));
+      }
+      setState(() {
+        _isSaving = false;
+      });
+      return false;
+    }
+  }
+  
+  // 判断是否需要同步到云端
+  Future<void> _syncToCloudIfNeeded(CalendarBookManager calendarManager, ScheduleItem schedule) async {
+    try {
+      final calendarBook = calendarManager.books.firstWhere(
+        (book) => book.id == schedule.calendarId,
+        orElse: () => throw Exception('找不到日历本'),
+      );
+
+      // 如果是共享日历，则同步到云端（只同步当前修改的日程）
+      if (calendarBook.isShared) {
+        print('日程页面：检测到共享日历的日程变更，准备同步到云端...');
+        print('同步单条日程，ID: ${schedule.id}');
+
+        try {
+          // 只同步特定的日程ID，而不是整个日历的所有日程
+          await calendarManager.syncSharedCalendarSchedules(
+            schedule.calendarId,
+            specificScheduleId: schedule.id,
+          );
+          print('日程页面：云端同步完成');
+        } catch (e) {
+          print('日程页面：同步到云端时出错: $e');
+          // 但不显示错误，避免影响用户体验
+        }
+      }
+    } catch (e) {
+      print('获取日历本信息时出错: $e');
+    }
+  }
+  
+  // 完成操作并返回
+  bool _finishAndReturnSuccess() {
+    print('添加日程返回结果为true，准备刷新页面');
+    // 返回上一页，并传递保存成功的标志
+    if (mounted) {
+      // 使用单一的true值作为结果，让调用方知道操作成功
+      Navigator.pop(context, true);
+    }
+    return true;
   }
 
   Widget _buildSectionTitle(String title) {
