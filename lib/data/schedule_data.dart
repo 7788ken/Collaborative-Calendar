@@ -8,6 +8,7 @@ class ScheduleData extends ChangeNotifier {
   List<ScheduleItem> _items = [];
   Map<String, bool> _taskCompletionStatus = {};
   bool _isLoaded = false;
+  bool _isDisposed = false; // 添加标记表示对象是否已被销毁
 
   List<ScheduleItem> get items => _items;
   bool get isLoaded => _isLoaded;
@@ -19,43 +20,77 @@ class ScheduleData extends ChangeNotifier {
 
   // 更新任务完成状态
   Future<void> updateTaskCompletionStatus(String taskKey, bool isCompleted) async {
+    if (_isDisposed) {
+      debugPrint('警告: 尝试更新已销毁对象的任务状态');
+      return;
+    }
+    
     _taskCompletionStatus[taskKey] = isCompleted;
     // 立即通知监听者
-    notifyListeners();
+    try {
+      notifyListeners();
+    } catch (e) {
+      debugPrint('立即通知监听者时出错: $e');
+    }
     
     // 保存到SharedPreferences
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('task_$taskKey', isCompleted);
-      print('任务状态已保存: $taskKey = $isCompleted');
+      debugPrint('任务状态已保存: $taskKey = $isCompleted');
       
       // 保存完成后再次通知，确保状态完全更新
-      Future.delayed(Duration(milliseconds: 50), () {
-        notifyListeners();
-      });
+      if (!_isDisposed) { // 检查对象是否已被销毁
+        Future.delayed(Duration(milliseconds: 50), () {
+          try {
+            if (!_isDisposed) { // 再次检查，因为在延迟期间可能被销毁
+              notifyListeners();
+              debugPrint('已发送保存后的延迟通知');
+            } else {
+              debugPrint('对象已销毁，跳过延迟通知');
+            }
+          } catch (e) {
+            debugPrint('发送延迟通知时出错: $e');
+          }
+        });
+      }
     } catch (e) {
-      print('保存任务状态时出错: $e');
+      debugPrint('保存任务状态时出错: $e');
     }
   }
 
   // 删除任务完成状态
   Future<void> removeTaskCompletionStatus(String taskKey) async {
+    if (_isDisposed) {
+      debugPrint('警告: 尝试删除已销毁对象的任务状态');
+      return;
+    }
+    
     // 从内存中移除
     _taskCompletionStatus.remove(taskKey);
-    notifyListeners();
+    try {
+      notifyListeners();
+    } catch (e) {
+      debugPrint('删除任务状态时通知出错: $e');
+    }
     
     // 从SharedPreferences中移除
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('task_$taskKey');
-      print('任务状态已移除: $taskKey');
+      debugPrint('任务状态已移除: $taskKey');
     } catch (e) {
-      print('移除任务状态时出错: $e');
+      debugPrint('移除任务状态时出错: $e');
     }
   }
 
   // 加载所有任务状态
   Future<void> loadTaskCompletionStatus() async {
+    if (_isDisposed) {
+      debugPrint('警告: 尝试加载已销毁对象的任务状态');
+      return;
+    }
+    
     try {
       final prefs = await SharedPreferences.getInstance();
       final allKeys = prefs.getKeys();
@@ -73,17 +108,32 @@ class ScheduleData extends ChangeNotifier {
       // 一次性更新，减少不必要的刷新
       _taskCompletionStatus = newStatus;
       
-      print('已加载 ${_taskCompletionStatus.length} 个任务状态');
+      debugPrint('已加载 ${_taskCompletionStatus.length} 个任务状态');
       
       // 立即通知监听者
-      notifyListeners();
+      try {
+        notifyListeners();
+      } catch (e) {
+        debugPrint('加载任务状态后通知出错: $e');
+      }
       
       // 延迟后再次通知，确保所有UI组件都能收到更新
-      Future.delayed(Duration(milliseconds: 50), () {
-        notifyListeners();
-      });
+      if (!_isDisposed) { // 检查对象是否已被销毁
+        Future.delayed(Duration(milliseconds: 50), () {
+          try {
+            if (!_isDisposed) { // 再次检查，因为在延迟期间可能被销毁
+              notifyListeners();
+              debugPrint('已发送延迟通知');
+            } else {
+              debugPrint('对象已销毁，跳过延迟通知');
+            }
+          } catch (e) {
+            debugPrint('发送延迟通知时出错: $e');
+          }
+        });
+      }
     } catch (e) {
-      print('加载任务状态时出错: $e');
+      debugPrint('加载任务状态时出错: $e');
     }
   }
 
@@ -103,6 +153,11 @@ class ScheduleData extends ChangeNotifier {
 
   // 清理不存在任务的完成状态记录
   Future<void> cleanupTaskCompletionStatus(List<ScheduleItem> allTasks) async {
+    if (_isDisposed) {
+      debugPrint('警告: 尝试清理已销毁对象的任务状态');
+      return;
+    }
+    
     // 创建有效的任务键集合
     final Set<String> validTaskKeys = {};
     for (final task in allTasks) {
@@ -129,13 +184,17 @@ class ScheduleData extends ChangeNotifier {
       for (final key in keysToRemove) {
         await prefs.remove('task_$key');
       }
-      print('已清理 ${keysToRemove.length} 个无效的任务完成状态记录');
+      debugPrint('已清理 ${keysToRemove.length} 个无效的任务完成状态记录');
     } catch (e) {
-      print('清理任务状态记录时出错: $e');
+      debugPrint('清理任务状态记录时出错: $e');
     }
     
     // 通知监听者状态变化
-    notifyListeners();
+    try {
+      notifyListeners();
+    } catch (e) {
+      debugPrint('清理后通知时出错: $e');
+    }
   }
 
   // 测试数据 - 使用正确的task_models.ScheduleItem而不是日历模型
@@ -238,8 +297,25 @@ class ScheduleData extends ChangeNotifier {
 
   // 强制刷新日历页面
   void forceRefresh() {
+    if (_isDisposed) {
+      debugPrint('警告: 尝试刷新已销毁对象');
+      return;
+    }
+    
     // 仅调用通知，不做其他操作
-    print('强制刷新日历页面状态');
-    notifyListeners();
+    debugPrint('强制刷新日历页面状态');
+    try {
+      notifyListeners();
+    } catch (e) {
+      debugPrint('强制刷新时通知出错: $e');
+    }
+  }
+  
+  // 重写dispose方法，标记对象已销毁
+  @override
+  void dispose() {
+    debugPrint('ScheduleData 被销毁');
+    _isDisposed = true;
+    super.dispose();
   }
 } 

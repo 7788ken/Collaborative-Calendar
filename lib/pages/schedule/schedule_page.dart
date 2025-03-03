@@ -22,31 +22,39 @@ class SchedulePage extends StatefulWidget {
 
   // 添加刷新方法
   static void refreshSchedules(BuildContext context) {
-    // 使用Provider.of查找_SchedulePageState并调用刷新方法
-    print('调用刷新日程方法');
+    // 使用更安全的方式刷新日程数据
+    debugPrint('调用刷新日程方法');
     
-    // 尝试通过全局Key刷新
-    if (globalKey.currentState != null) {
-      print('通过GlobalKey找到SchedulePage状态，强制刷新日程');
-      globalKey.currentState!._loadSchedules();
-      return;
-    }
-    
-    // 备用方法：使用Provider通知所有监听者
     try {
-      // 检查context是否仍然有效
-      if (!context.mounted) {
-        print('context已经不再挂载，跳过Provider刷新');
+      // 尝试通过全局Key刷新
+      if (globalKey.currentState != null && globalKey.currentState!.mounted) {
+        debugPrint('通过GlobalKey找到SchedulePage状态，强制刷新日程');
+        globalKey.currentState!._loadSchedules();
         return;
       }
       
-      // 使用Provider尝试刷新所有SchedulePage
-      final scheduleData = Provider.of<ScheduleData>(context, listen: false);
-      scheduleData.notifyListeners();
-      print('通过Provider通知刷新成功');
+      // 备用方法：使用Provider通知所有监听者
+      try {
+        // 检查context是否仍然有效
+        if (!context.mounted) {
+          debugPrint('context已经不再挂载，跳过Provider刷新');
+          return;
+        }
+        
+        try {
+          final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+          debugPrint('使用Provider通知刷新');
+          // 触发通知刷新
+          scheduleData.notifyListeners();
+        } catch (e) {
+          debugPrint('通过Provider刷新失败: $e');
+        }
+      } catch (e) {
+        debugPrint('刷新日程时出错: $e');
+      }
     } catch (e) {
-      print('尝试Provider刷新失败: $e');
-      // 错误发生时不做任何操作，避免应用崩溃
+      debugPrint('调用刷新日程方法时发生异常: $e');
+      // 吞掉异常，不要影响UI
     }
   }
 

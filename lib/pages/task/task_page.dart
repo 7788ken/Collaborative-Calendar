@@ -429,50 +429,92 @@ class _TaskPageState extends State<TaskPage> {
       context, 
       originalItem,
       onStateChanged: () {
-        // 立即刷新日历页面
-        SchedulePage.refreshSchedules(context);
+        // 立即刷新日历页面，仅在组件挂载时执行
+        if (!mounted) {
+          debugPrint('任务页面：回调时组件已销毁，取消操作');
+          return;
+        }
+        
+        try {
+          SchedulePage.refreshSchedules(context);
+          debugPrint('任务页面：已刷新日历页面');
+        } catch (e) {
+          debugPrint('任务页面：刷新日历页面时出错：$e');
+        }
         
         // 使用单次延迟刷新确保统计数据更新
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            SchedulePage.refreshSchedules(context);
-            
-            // 适当延迟后刷新当前页面，确保状态更新
-            if (mounted) {
-              // 记住当前筛选器状态
-              final FilterStatus currentFilterStatus = _filterStatus;
-              final String currentSearchText = _searchText;
-              final bool currentShowExpired = _showExpired;
-              
-              _loadTasks().then((_) {
-                // 恢复筛选器状态
-                if (mounted) {
-                  setState(() {
-                    _filterStatus = currentFilterStatus;
-                    _searchText = currentSearchText;
-                    _showExpired = currentShowExpired;
-                    _searchController.text = currentSearchText;
-                    _applyFilters();
-                  });
-                  
-                  // 恢复滚动位置
-                  if (currentScrollPosition != null && _scrollController.hasClients) {
-                    Future.microtask(() {
-                      _scrollController.jumpTo(
-                        currentScrollPosition.clamp(
-                          0.0, 
-                          _scrollController.position.maxScrollExtent
-                        )
-                      );
-                    });
-                  }
-                }
-              });
-            }
-          }
-        });
+        // 用一个safe方法包装延迟操作
+        _safeDelayedRefresh();
       }
     );
+  }
+  
+  // 安全地执行延迟刷新操作
+  void _safeDelayedRefresh() {
+    // 在执行延迟操作前先检查组件状态
+    if (!mounted) {
+      debugPrint('任务页面：延迟刷新前组件已销毁');
+      return;
+    }
+    
+    // 捕获当前的 BuildContext 以避免在回调中使用可能已被销毁的 context
+    final capturedContext = context;
+    
+    // 执行延迟刷新
+    Future.delayed(const Duration(milliseconds: 300), () {
+      // 再次检查组件状态
+      if (!mounted) {
+        debugPrint('任务页面：延迟回调时组件已销毁，取消操作');
+        return;
+      }
+      
+      try {
+        // 使用安全的方法刷新日历页面
+        _safeRefreshSchedules(capturedContext);
+      } catch (e) {
+        debugPrint('任务页面：延迟刷新日历页面时出错：$e');
+      }
+      
+      // 仅在组件仍然活跃时更新当前页面
+      if (!mounted) return;
+      
+      try {
+        // 记住当前筛选器状态
+        final FilterStatus currentFilterStatus = _filterStatus;
+        final String currentSearchText = _searchText;
+        final bool currentShowExpired = _showExpired;
+        
+        _loadTasks().then((_) {
+          // 仅在组件仍然活跃时恢复筛选器状态
+          if (!mounted) return;
+          
+          setState(() {
+            _filterStatus = currentFilterStatus;
+            _searchText = currentSearchText;
+            _showExpired = currentShowExpired;
+            _applyFilters();
+          });
+        }).catchError((e) {
+          debugPrint('任务页面：加载任务时出错：$e');
+        });
+      } catch (e) {
+        debugPrint('任务页面：更新当前页面时出错：$e');
+      }
+    });
+  }
+  
+  // 安全地刷新日历页面
+  void _safeRefreshSchedules(BuildContext capturedContext) {
+    try {
+      // 确保 context 仍然有效
+      if (!mounted) return;
+      
+      // 尝试刷新日历页面
+      SchedulePage.refreshSchedules(capturedContext);
+      debugPrint('任务页面：延迟刷新日历页面成功');
+    } catch (e) {
+      debugPrint('任务页面：刷新日历页面出错：$e');
+    }
   }
   
   // 根据任务项查找对应的原始日程项

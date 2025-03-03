@@ -206,8 +206,11 @@ class DatabaseHelper {
         where: 'calendar_id = ? AND end_time >= ? AND start_time <= ?',
         whereArgs: [calendarId, startTime, endTime],
       );
-      
-      print('DatabaseHelper: 查询到 ${maps.length} 条日程记录');
+      try {
+        print('DatabaseHelper: 查询到 ${maps.length} 条日程记录');
+      } catch (e) {
+        print('DatabaseHelper: 查询日程时出错: $e');
+      }
       
       final schedules = List.generate(maps.length, (i) => ScheduleItem.fromMap(maps[i]));
       
