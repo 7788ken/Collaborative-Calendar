@@ -971,9 +971,12 @@ class _MainPageState extends State<MainPage> {
                   // 关闭输入对话框
                   Navigator.of(context).pop();
 
-                  // 保存当前上下文的NavigatorState引用以安全操作
-                  final navigator = Navigator.of(context);
-
+                  // 使用全局 ScaffoldMessengerState 而非依赖于传入的 context
+                  final scaffoldMessenger = ScaffoldMessenger.of(context);
+                  
+                  // 使用一个变量跟踪对话框是否显示
+                  bool isDialogShowing = true;
+                  
                   // 显示加载对话框
                   showDialog(
                     context: context,
@@ -997,35 +1000,62 @@ class _MainPageState extends State<MainPage> {
                     final success = await calendarManager
                         .importSharedCalendarFromCloud(shareCode);
 
-                    // 安全地关闭加载对话框（使用捕获的navigator对象）
-                    if (navigator.mounted) navigator.pop();
+                    // 如果对话框仍在显示，则关闭它
+                    if (isDialogShowing) {
+                      Navigator.of(context).pop();
+                      isDialogShowing = false;
+                    }
 
-                    // 使用Future延迟以确保在UI更新后显示Snackbar
-                    Future.microtask(() {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(success ? '日历导入成功' : '导入失败，该日历已存在'),
-                          duration: const Duration(seconds: 2),
+                    // 显示导入结果
+                    if (success) {
+                      scaffoldMessenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('日历导入成功'),
+                          duration: Duration(seconds: 2),
                         ),
                       );
-                    });
+                    } else {
+                      scaffoldMessenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('导入失败，该日历可能已存在或者分享码无效'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
                   } catch (e) {
-                    // 安全地关闭加载对话框（使用捕获的navigator对象）
-                    if (navigator.mounted) navigator.pop();
+                    // 如果对话框仍在显示，则关闭它
+                    if (isDialogShowing) {
+                      Navigator.of(context).pop();
+                      isDialogShowing = false;
+                    }
 
-                    // 使用Future延迟以确保在UI更新后显示Snackbar
-                    Future.microtask(() {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('导入失败: $e'),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    });
+                    // 根据错误类型提供更有用的错误信息
+                    String errorMessage = '导入失败';
+                    
+                    if (e.toString().contains('网络连接错误') || 
+                        e.toString().contains('SocketException')) {
+                      errorMessage = '网络连接错误，请检查网络后重试';
+                    } else if (e.toString().contains('超时')) {
+                      errorMessage = '连接服务器超时，请稍后重试';
+                    } else if (e.toString().contains('无效') || 
+                              e.toString().contains('不存在')) {
+                      errorMessage = '分享码无效或日历不存在';
+                    } else if (e.toString().contains('已存在')) {
+                      errorMessage = '该日历已导入，请勿重复导入';
+                    }
+                    
+                    // 使用全局 ScaffoldMessenger 显示结果
+                    scaffoldMessenger.showSnackBar(
+                      SnackBar(
+                        content: Text(errorMessage),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
                   }
                 }
               },
               child: const Text('导入'),
+              //点击导入后应该关闭对话框和侧边栏。
             ),
           ],
         );

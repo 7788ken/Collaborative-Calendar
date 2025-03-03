@@ -141,12 +141,6 @@ class ApiService {
     try {
       debugPrint('开始获取共享日历信息，分享码: $shareCode');
       
-      // Map<String, dynamic> fallbackResponse = {
-      //   'name': '导入失败的日历',
-      //   'color': Colors.grey.value.toRadixString(16), 
-      //   'error': '无法获取日历信息'
-      // };
-      
       try {
         final response = await _makeRequestWithRetry(
           requestFunc: () => http.get(
@@ -159,15 +153,13 @@ class ApiService {
         // 检查HTTP状态码
         if (response.statusCode < 200 || response.statusCode >= 300) {
           debugPrint('服务器返回错误状态码: ${response.statusCode}');
-          fallbackResponse['error'] = '服务器返回错误状态码: ${response.statusCode}';
-          return fallbackResponse;
+          throw Exception('服务器返回错误状态码: ${response.statusCode}');
         }
         
         // 检查响应体是否为空
         if (response.body.isEmpty) {
           debugPrint('服务器返回空响应');
-          fallbackResponse['error'] = '服务器返回空响应';
-          return fallbackResponse;
+          throw Exception('服务器返回空响应');
         }
         
         // 记录原始响应内容用于调试
@@ -179,15 +171,13 @@ class ApiService {
           data = json.decode(response.body);
         } catch (e) {
           debugPrint('解析JSON出错: $e');
-          fallbackResponse['error'] = '解析服务器响应失败: $e';
-          return fallbackResponse;
+          throw Exception('解析服务器响应失败: $e');
         }
         
         // 服务器可能返回错误信息
         if (data.containsKey('error')) {
           debugPrint('服务器返回错误信息: ${data['error']}');
-          fallbackResponse['error'] = '服务器错误: ${data['error']}';
-          return fallbackResponse;
+          throw Exception('服务器错误: ${data['error']}');
         }
         
         // 检查服务器返回的数据结构
@@ -199,8 +189,7 @@ class ApiService {
             return calendarData;
           } else {
             debugPrint('calendar字段不是有效的对象: $calendarData');
-            fallbackResponse['error'] = 'calendar字段格式无效';
-            return fallbackResponse;
+            throw Exception('calendar字段格式无效');
           }
         } else if (data.containsKey('name') && data.containsKey('color')) {
           // 直接返回了日历对象
@@ -209,29 +198,16 @@ class ApiService {
         } else {
           // 缺少必要字段
           debugPrint('API返回的数据不符合预期: $data');
-          fallbackResponse['error'] = '返回数据缺少必要字段';
-          // 检查是否有可用信息可以提取
-          if (data.containsKey('name')) {
-            fallbackResponse['name'] = data['name'];
-          }
-          if (data.containsKey('color')) {
-            fallbackResponse['color'] = data['color'];
-          }
-          return fallbackResponse;
+          throw Exception('返回数据缺少必要字段');
         }
       } catch (e) {
         debugPrint('获取共享日历过程中出错: $e');
-        fallbackResponse['error'] = '获取日历信息失败: $e';
-        return fallbackResponse;
+        throw Exception('获取日历信息失败: $e');
       }
     } catch (e) {
       // 最外层的错误处理，确保永远不会抛出未捕获的异常
       debugPrint('获取共享日历过程中发生严重错误: $e');
-      return {
-        'name': '错误',
-        'color': Colors.red.value.toRadixString(16),
-        'error': '严重错误: $e'
-      };
+      throw Exception('获取日历信息失败: $e');
     }
   }
   
