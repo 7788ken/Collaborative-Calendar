@@ -8,6 +8,7 @@ import '../models/schedule_item.dart';
 import '../services/api_service.dart';
 import 'package:http/http.dart' as http;
 import 'dart:async'; // 添加Timer支持
+import '../services/api_auth_service.dart';
 
 // 日历本管理类
 class CalendarBookManager with ChangeNotifier {
@@ -1272,89 +1273,47 @@ class CalendarBookManager with ChangeNotifier {
   // 添加测试方法：直接同步特定任务ID的完成状态
   Future<bool> syncSpecificTask(String shareCode, String scheduleId, bool isCompleted) async {
     try {
-      // 参数校验
-      if (shareCode.isEmpty) {
-        debugPrint('错误: 分享码为空');
+      // 参数验证
+      if (shareCode.isEmpty || scheduleId.isEmpty) {
+        debugPrint('同步任务失败：shareCode 或 scheduleId 为空');
         return false;
       }
-      
-      if (scheduleId.isEmpty) {
-        debugPrint('错误: 日程ID为空');
-        return false;
-      }
-      
-      debugPrint('开始直接同步特定任务: ID=$scheduleId, 完成状态=${isCompleted ? "已完成" : "未完成"}');
-      debugPrint('使用分享码: $shareCode');
-      
-      // 使用新的API方法更新状态
-      try {
-        final result = await _apiService.updateScheduleStatus(shareCode, scheduleId, isCompleted);
-        
-        if (result['success'] == true) {
-          debugPrint('同步结果: $result');
-          
-          // 更新本地数据库
-          try {
-            final dbHelper = DatabaseHelper();
-            final database = await dbHelper.database;
-            await database.update(
-              'schedules',
-              {'is_completed': isCompleted ? 1 : 0},
-              where: 'id = ?',
-              whereArgs: [scheduleId]
-            );
-            
-            debugPrint('本地数据库已更新完成状态为: ${isCompleted ? "已完成" : "未完成"}');
-            
-            // 同时更新SharedPreferences中的任务完成状态记录
-            try {
-              final prefs = await SharedPreferences.getInstance();
-              
-              // 获取任务的开始时间
-              final List<Map<String, dynamic>> taskData = await database.query(
-                'schedules',
-                where: 'id = ?',
-                whereArgs: [scheduleId],
-              );
-              
-              if (taskData.isNotEmpty) {
-                final startTime = taskData.first['start_time'];
-                if (startTime != null) {
-                  final DateTime startDateTime = DateTime.fromMillisecondsSinceEpoch(startTime);
-                  final taskKey = '${startDateTime.year}-${startDateTime.month}-${startDateTime.day}-$scheduleId';
-                  
-                  if (isCompleted) {
-                    await prefs.setBool('task_$taskKey', true);
-                    debugPrint('SharedPreferences已更新任务状态: task_$taskKey = true');
-                  } else {
-                    // 如果取消完成，则删除记录
-                    if (prefs.containsKey('task_$taskKey')) {
-                      await prefs.remove('task_$taskKey');
-                      debugPrint('从SharedPreferences中删除了任务状态: task_$taskKey');
-                    }
-                  }
-                }
-              }
-            } catch (e) {
-              debugPrint('更新SharedPreferences中的任务状态时出错: $e');
-              // 继续执行，因为数据库已经更新成功
-            }
-            
-            return true;
-          } catch (e) {
-            debugPrint('更新本地数据库时出错: $e');
-            return false;
-          }
+
+      debugPrint('开始同步任务: shareCode=$shareCode, scheduleId=$scheduleId, isCompleted=$isCompleted');
+
+      // 生成认证头
+      final path = '/api/calendars/$shareCode/schedules/$scheduleId';
+      final headers = ApiAuthService.generateAuthHeaders(path);
+
+      // 调用 API 更新状态
+      final result = await _apiService.updateScheduleStatus(
+        shareCode,
+        scheduleId,
+        isCompleted,
+        headers: headers,
+      );
+
+      if (result['success'] == true) {
+        // 更新本地数据库
+        await _dbHelper.updateScheduleSyncStatus(scheduleId, true);
+
+        // 更新 SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        final key = 'task_completed_$scheduleId';
+        if (isCompleted) {
+          await prefs.setBool(key, true);
         } else {
-          debugPrint('同步失败，服务器返回: $result');
-          return false;
+          await prefs.remove(key);
         }
-      } catch (e) {
-        debugPrint('调用API服务时出错: $e');
+
+        debugPrint('任务同步成功');
+        return true;
+      } else {
+        debugPrint('任务同步失败：${result['message']}');
         return false;
       }
     } catch (e) {
-      debugPrint('直接同步特定任务时出错: $e');
+      debugPrint('任务同步发生错误: $e');
       return false;
     }
   }

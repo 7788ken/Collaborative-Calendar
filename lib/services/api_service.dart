@@ -924,15 +924,23 @@ class ApiService {
     }
   }
 
-  // 更新任务状态方法：完成/未完成
-  Future<Map<String, dynamic>> updateScheduleStatus(String shareCode, String scheduleId, bool isCompleted) async {
+  // 更新特定日程的状态
+  Future<Map<String, dynamic>> updateScheduleStatus(
+    String shareCode, 
+    String scheduleId, 
+    bool isCompleted,
+    {Map<String, String>? headers}
+  ) async {
     try {
       debugPrint('开始更新日程状态: shareCode=$shareCode, scheduleId=$scheduleId, isCompleted=$isCompleted');
       
       final response = await _makeRequestWithRetry(
         requestFunc: () => http.put(
           Uri.parse('$baseUrl/api/calendars/$shareCode/schedules/$scheduleId'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            ...?headers,
+          },
           body: json.encode({
             'isCompleted': isCompleted
           }),
