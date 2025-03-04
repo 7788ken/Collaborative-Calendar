@@ -11,6 +11,36 @@ class ApiService {
   static const Duration defaultTimeout = Duration(seconds: 10); // 默认10秒超时
   static const int maxRetries = 3; // 最大重试次数
   
+  // 检查服务器是否可用
+  Future<bool> checkServerStatus() async {
+    try {
+      debugPrint('ApiService: 开始检查服务器状态');
+      final response = await http.get(Uri.parse('$baseUrl/health'))
+          .timeout(const Duration(seconds: 5));
+      
+      debugPrint('ApiService: 服务器响应状态码: ${response.statusCode}');
+      
+      // 如果服务器返回200-299之间的状态码，说明服务器正常运行
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } on TimeoutException {
+      debugPrint('ApiService: 服务器状态检查超时');
+      return false;
+    } on SocketException {
+      debugPrint('ApiService: 无法连接到服务器');
+      return false;
+    } catch (e) {
+      debugPrint('ApiService: 检查服务器状态时出错: $e');
+      return false;
+    }
+  }
+  
+  // 在执行API请求前检查服务器状态
+  Future<void> _checkServerBeforeRequest() async {
+    if (!await checkServerStatus()) {
+      throw Exception('Connection refused');
+    }
+  }
+  
   // 用于通用错误处理
   Future<dynamic> _handleResponse(http.Response response) async {
     if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -26,6 +56,9 @@ class ApiService {
     int maxRetries = 3,
     Duration retryDelay = const Duration(seconds: 1),
   }) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     int attempts = 0;
     
     while (true) {
@@ -46,6 +79,11 @@ class ApiService {
           } else {
             throw Exception('请求失败，所有重试均失败: $e');
           }
+        }
+        
+        // 在重试前检查服务器状态
+        if (!await checkServerStatus()) {
+          throw Exception('Connection refused');
         }
         
         // 根据错误类型决定是否重试
@@ -75,6 +113,9 @@ class ApiService {
   
   // 创建共享日历并获取分享码
   Future<String> shareCalendar(CalendarBook calendar, List<ScheduleItem> schedules) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     try {
       debugPrint('开始共享日历: ${calendar.name}');
       // 确保日期字段被正确转换为毫秒时间戳格式
@@ -138,6 +179,9 @@ class ApiService {
   
   // 获取共享日历信息
   Future<Map<String, dynamic>> getSharedCalendar(String shareCode) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     try {
       debugPrint('开始获取共享日历信息，分享码: $shareCode');
       
@@ -213,6 +257,9 @@ class ApiService {
   
   // 获取日历最后更新时间
   Future<DateTime?> getCalendarLastUpdateTime(String shareCode) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     try {
       debugPrint('开始获取日历最后更新时间，分享码: $shareCode');
       
@@ -296,6 +343,9 @@ class ApiService {
   
   // 更新共享日历信息
   Future<void> updateSharedCalendar(String shareCode, String name, int colorValue) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     final response = await http.put(
       Uri.parse('$baseUrl/api/calendars/$shareCode'),
       headers: {'Content-Type': 'application/json'},
@@ -312,6 +362,9 @@ class ApiService {
   
   // 获取日历下所有日程
   Future<List<dynamic>> getSchedules(String shareCode) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     try {
       debugPrint('开始获取日历日程，分享码: $shareCode');
       
@@ -444,6 +497,9 @@ class ApiService {
   
   // 添加日程
   Future<Map<String, dynamic>> addSchedule(String shareCode, ScheduleItem schedule) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     try {
       debugPrint('ApiService: 开始添加日程，shareCode=$shareCode, title=${schedule.title}');
       
@@ -485,6 +541,9 @@ class ApiService {
   
   // 更新日程
   Future<void> updateSchedule(String shareCode, String scheduleId, ScheduleItem schedule) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     try {
       debugPrint('ApiService: 开始更新日程，shareCode=$shareCode, scheduleId=$scheduleId');
       
@@ -526,6 +585,9 @@ class ApiService {
   
   // 删除日程
   Future<void> deleteSchedule(String shareCode, String scheduleId) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     try {
       // 服务器已经实现了软删除，使用DELETE请求时会将isDeleted字段设为true
       debugPrint('ApiService: 发送删除请求，shareCode=$shareCode, scheduleId=$scheduleId');
@@ -553,6 +615,9 @@ class ApiService {
   
   // 批量同步日程（处理离线编辑后的同步）
   Future<Map<String, dynamic>> syncSchedules(String shareCode, List<Map<String, dynamic>> changes) async {
+    // 先检查服务器状态
+    await _checkServerBeforeRequest();
+    
     try {
       debugPrint('开始同步日程到云端，分享码: $shareCode');
       debugPrint('需要同步的日程数量: ${changes.length}');
@@ -856,6 +921,28 @@ class ApiService {
         'stackTrace': stackTrace.toString(),
         'changes': []
       };
+    }
+  }
+
+  // 更新任务状态方法：完成/未完成
+  Future<Map<String, dynamic>> updateScheduleStatus(String shareCode, String scheduleId, bool isCompleted) async {
+    try {
+      debugPrint('开始更新日程状态: shareCode=$shareCode, scheduleId=$scheduleId, isCompleted=$isCompleted');
+      
+      final response = await _makeRequestWithRetry(
+        requestFunc: () => http.put(
+          Uri.parse('$baseUrl/api/calendars/$shareCode/schedules/$scheduleId'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'isCompleted': isCompleted
+          }),
+        ),
+      );
+      
+      return await _handleResponse(response);
+    } catch (e) {
+      debugPrint('更新日程状态失败: $e');
+      rethrow;
     }
   }
 } 

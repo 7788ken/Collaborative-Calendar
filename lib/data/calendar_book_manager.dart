@@ -24,6 +24,21 @@ class CalendarBookManager with ChangeNotifier {
   Timer? _updateCheckTimer;
   // 定时器间隔（默认5分钟检查一次）
   static const Duration _updateCheckInterval = Duration(minutes: 5);
+  // 是否启用定时同步（默认关闭）
+  bool _enablePeriodicSync = false;
+
+  // 检查服务器是否可用
+  Future<bool> checkServerAvailability() async {
+    try {
+      debugPrint('检查服务器是否可用...');
+      final result = await _apiService.checkServerStatus();
+      debugPrint('服务器状态检查结果: $result');
+      return result;
+    } catch (e) {
+      debugPrint('检查服务器状态时出错: $e');
+      return false;
+    }
+  }
 
   List<CalendarBook> get books => _books;
   
@@ -301,16 +316,13 @@ class CalendarBookManager with ChangeNotifier {
       if (selectedBook.isShared) {
         debugPrint('切换到共享日历本，自动检查更新');
         
-        // 异步检查并获取最新数据，不阻塞UI
-        checkAndFetchCalendarUpdates(id).then((updated) {
-          if (updated) {
-            debugPrint('成功拉取共享日历 $id 的最新数据');
-          } else {
-            debugPrint('共享日历 $id 没有检测到更新或拉取失败');
-          }
-        }).catchError((error) {
-          debugPrint('检查共享日历 $id 更新时出错: $error');
-        });
+        // 直接更新当前日历的最后修改时间并同步
+        try {
+          await _updateLastModifiedTimeIfShared(id);
+          debugPrint('成功更新共享日历 $id 的最后修改时间');
+        } catch (e) {
+          debugPrint('更新共享日历 $id 的最后修改时间时出错: $e');
+        }
       }
     }
   }
@@ -1274,92 +1286,52 @@ class CalendarBookManager with ChangeNotifier {
       debugPrint('开始直接同步特定任务: ID=$scheduleId, 完成状态=${isCompleted ? "已完成" : "未完成"}');
       debugPrint('使用分享码: $shareCode');
       
-      // 获取任务数据
-      final dbHelper = DatabaseHelper();
-      Map<String, dynamic>? taskData;
-      
+      // 使用新的API方法更新状态
       try {
-      final database = await dbHelper.database;
-      
-      final List<Map<String, dynamic>> maps = await database.query(
-        'schedules',
-        where: 'id = ?',
-        whereArgs: [scheduleId],
-      );
-      
-      if (maps.isEmpty) {
-          debugPrint('错误: 找不到ID为 $scheduleId 的任务');
-        return false;
-      }
-      
-        taskData = maps.first;
-        debugPrint('找到任务: ${taskData['title']}');
-      } catch (e) {
-        debugPrint('查询数据库时出错: $e');
-        return false;
-      }
-      
-      if (taskData == null) {
-        debugPrint('错误: 无法获取任务数据');
-        return false;
-      }
-      
-      // 构建需要同步的任务数据
-      Map<String, dynamic> syncData;
-      try {
-        syncData = {
-        'id': taskData['id'],
-          'title': taskData['title'] ?? '',
-          'description': taskData['description'] ?? '',
-          'location': taskData['location'] ?? '',
-        'startTime': taskData['start_time'],
-        'endTime': taskData['end_time'],
-        'isAllDay': taskData['is_all_day'],
-        'isCompleted': isCompleted ? 1 : 0,  // 确保使用整数 1/0 而不是布尔值
-      };
-      
-        debugPrint('准备发送的数据: $syncData');
-      } catch (e) {
-        debugPrint('准备同步数据时出错: $e');
-        return false;
-      }
-      
-      // 使用API服务中的配置和错误处理机制
-      try {
-        final result = await _apiService.syncSchedules(shareCode, [syncData]);
+        final result = await _apiService.updateScheduleStatus(shareCode, scheduleId, isCompleted);
         
         if (result['success'] == true) {
           debugPrint('同步结果: $result');
           
           // 更新本地数据库
           try {
+            final dbHelper = DatabaseHelper();
             final database = await dbHelper.database;
-        await database.update(
-          'schedules',
-          {'is_completed': isCompleted ? 1 : 0},
-          where: 'id = ?',
-          whereArgs: [scheduleId]
-        );
-        
+            await database.update(
+              'schedules',
+              {'is_completed': isCompleted ? 1 : 0},
+              where: 'id = ?',
+              whereArgs: [scheduleId]
+            );
+            
             debugPrint('本地数据库已更新完成状态为: ${isCompleted ? "已完成" : "未完成"}');
             
             // 同时更新SharedPreferences中的任务完成状态记录
             try {
               final prefs = await SharedPreferences.getInstance();
-              final startTime = taskData['start_time'];
               
-              if (startTime != null) {
-                final DateTime startDateTime = DateTime.fromMillisecondsSinceEpoch(startTime);
-                final taskKey = '${startDateTime.year}-${startDateTime.month}-${startDateTime.day}-$scheduleId';
-                
-                if (isCompleted) {
-                  await prefs.setBool('task_$taskKey', true);
-                  debugPrint('SharedPreferences已更新任务状态: task_$taskKey = true');
-      } else {
-                  // 如果取消完成，则删除记录
-                  if (prefs.containsKey('task_$taskKey')) {
-                    await prefs.remove('task_$taskKey');
-                    debugPrint('从SharedPreferences中删除了任务状态: task_$taskKey');
+              // 获取任务的开始时间
+              final List<Map<String, dynamic>> taskData = await database.query(
+                'schedules',
+                where: 'id = ?',
+                whereArgs: [scheduleId],
+              );
+              
+              if (taskData.isNotEmpty) {
+                final startTime = taskData.first['start_time'];
+                if (startTime != null) {
+                  final DateTime startDateTime = DateTime.fromMillisecondsSinceEpoch(startTime);
+                  final taskKey = '${startDateTime.year}-${startDateTime.month}-${startDateTime.day}-$scheduleId';
+                  
+                  if (isCompleted) {
+                    await prefs.setBool('task_$taskKey', true);
+                    debugPrint('SharedPreferences已更新任务状态: task_$taskKey = true');
+                  } else {
+                    // 如果取消完成，则删除记录
+                    if (prefs.containsKey('task_$taskKey')) {
+                      await prefs.remove('task_$taskKey');
+                      debugPrint('从SharedPreferences中删除了任务状态: task_$taskKey');
+                    }
                   }
                 }
               }
@@ -1371,17 +1343,16 @@ class CalendarBookManager with ChangeNotifier {
             return true;
           } catch (e) {
             debugPrint('更新本地数据库时出错: $e');
-            // 虽然本地更新失败，但服务器同步成功，仍然返回true
-            return true;
+            return false;
           }
         } else {
-          debugPrint('同步失败，服务器返回错误: ${result['message']}');
+          debugPrint('同步失败，服务器返回: $result');
+          return false;
+        }
+      } catch (e) {
+        debugPrint('调用API服务时出错: $e');
         return false;
       }
-    } catch (e) {
-        debugPrint('同步请求过程中出错: $e');
-      return false;
-    }
     } catch (e) {
       debugPrint('直接同步特定任务时出错: $e');
       return false;
@@ -1459,13 +1430,23 @@ class CalendarBookManager with ChangeNotifier {
       // 加载完成后，更新所有共享日历的最后修改时间
       // 使用防御性编程，确保即使更新失败也不会中断初始化
       try {
-        await updateAllSharedCalendarsTimes();
+        // 只同步当前选中的日历
+        if (activeBook != null && activeBook!.isShared) {
+          debugPrint('仅同步当前选中的共享日历: ${activeBook!.id}');
+          await _updateLastModifiedTimeIfShared(activeBook!.id);
+        } else {
+          debugPrint('当前选中的日历不是共享日历或未找到，跳过同步');
+        }
       } catch (e) {
-        debugPrint('更新共享日历时间失败，但继续初始化: $e');
+        debugPrint('更新当前共享日历时间失败，但继续初始化: $e');
       }
       
-      // 启动定时器
-      _startUpdateCheckTimer();
+      // 只有在启用定时同步时才启动定时器
+      if (_enablePeriodicSync) {
+        _startUpdateCheckTimer();
+      } else {
+        debugPrint('定时同步功能已关闭，不启动定时器');
+      }
       
       // 通知监听器完成初始化
       try {
@@ -1498,6 +1479,12 @@ class CalendarBookManager with ChangeNotifier {
 
   // 启动定时器，定期检查日历更新
   void _startUpdateCheckTimer() {
+    // 如果定时同步被禁用，则直接返回
+    if (!_enablePeriodicSync) {
+      debugPrint('定时同步功能已关闭，不启动定时器');
+      return;
+    }
+    
     // 确保先取消之前的定时器
     _updateCheckTimer?.cancel();
     

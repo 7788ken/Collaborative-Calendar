@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';  // 添加 services 包导入
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'pages/schedule/schedule_page.dart';
@@ -7,7 +8,9 @@ import 'pages/profile/profile_page.dart';
 import 'widgets/add_schedule_page.dart';
 import 'data/calendar_book_manager.dart';
 import 'data/models/calendar_book.dart';
-import 'data/schedule_data.dart'; // 添加 ScheduleData 导入
+import 'data/schedule_data.dart';
+import 'utils/sync_helper.dart';  // 添加 SyncHelper 导入
+import 'package:flutter/rendering.dart';
 
 // 添加主题状态管理类
 class ThemeProvider with ChangeNotifier {
@@ -340,60 +343,11 @@ class _MainPageState extends State<MainPage> {
                         return IconButton(
                           icon: const Icon(Icons.sync),
                           tooltip: '检查日历更新',
-                          onPressed: () async {
-                            // 显示加载指示器
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    SizedBox(width: 16),
-                                    Text('正在检查日历更新...'),
-                                  ],
-                                ),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-
-                            try {
-                              // 检查并拉取更新
-                              final updated = await calendarManager
-                                  .checkAndFetchCalendarUpdates(activeBook.id);
-
-                              // 显示操作结果
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    updated ? '已更新到最新日历数据' : '日历已是最新，无需更新',
-                                  ),
-                                  backgroundColor:
-                                      updated ? Colors.green : Colors.blue,
-                                ),
-                              );
-
-                              // 如果有更新，刷新日历页面显示最新数据
-                              if (updated) {
-                                // 刷新页面
-                                SchedulePage.refreshSchedules(context);
-                                TaskPage.refreshTasks(context);
-                              }
-                            } catch (e) {
-                              // 显示错误信息
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('更新失败: $e'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          },
+                          onPressed: () => SyncHelper.syncCalendar(
+                            context: context,
+                            calendarBook: activeBook,
+                            calendarManager: calendarManager,
+                          ),
                         );
                       } else {
                         return const SizedBox(); // 如果不是共享日历，则不显示按钮
@@ -541,7 +495,7 @@ class _MainPageState extends State<MainPage> {
                 //最后更新时间
                 const SizedBox(height: 8),
                 Text(
-                  '最后更新:  --未实现，待完善',
+                  '最后更新: ${SyncHelper.formatLastUpdateTime(calendarManager.getLastUpdateTime(currentBook?.id ?? ''))}',
                   style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
                 const SizedBox(height: 8),
@@ -597,55 +551,7 @@ class _MainPageState extends State<MainPage> {
                                         // 获取日历最后更新时间
                                         final updateTime = calendarManager
                                             .getLastUpdateTime(book.id);
-                                        String timeText = '未同步';
-
-                                        if (updateTime != null) {
-                                          // 格式化为本地时间
-                                          final now = DateTime.now();
-                                          final today = DateTime(
-                                            now.year,
-                                            now.month,
-                                            now.day,
-                                          );
-                                          final updateDate = DateTime(
-                                            updateTime.year,
-                                            updateTime.month,
-                                            updateTime.day,
-                                          );
-
-                                          if (updateDate.isAtSameMomentAs(
-                                            today,
-                                          )) {
-                                            // 今天更新的，只显示时间
-                                            timeText =
-                                                '今天 ${updateTime.hour.toString().padLeft(2, '0')}:${updateTime.minute.toString().padLeft(2, '0')}';
-                                          } else if (updateDate.isAfter(
-                                            today.subtract(
-                                              const Duration(days: 7),
-                                            ),
-                                          )) {
-                                            // 一周内，显示星期几
-                                            final weekdays = [
-                                              '周一',
-                                              '周二',
-                                              '周三',
-                                              '周四',
-                                              '周五',
-                                              '周六',
-                                              '周日',
-                                            ];
-                                            final weekday =
-                                                weekdays[(updateTime.weekday -
-                                                        1) %
-                                                    7];
-                                            timeText =
-                                                '$weekday ${updateTime.hour.toString().padLeft(2, '0')}:${updateTime.minute.toString().padLeft(2, '0')}';
-                                          } else {
-                                            // 更早的时间，显示完整日期
-                                            timeText =
-                                                '${updateTime.year}/${updateTime.month.toString().padLeft(2, '0')}/${updateTime.day.toString().padLeft(2, '0')} ${updateTime.hour.toString().padLeft(2, '0')}:${updateTime.minute.toString().padLeft(2, '0')}';
-                                          }
-                                        }
+                                        final timeText = SyncHelper.formatLastUpdateTime(updateTime);
 
                                         return Text(
                                           '最后更新: $timeText',
@@ -658,7 +564,6 @@ class _MainPageState extends State<MainPage> {
                                     ),
                                     // 添加刷新按钮（保持原有的布局结构）
                                     const SizedBox(width: 4),
-
                                     SizedBox(
                                       height: 12,
                                       width: 12,
@@ -671,79 +576,11 @@ class _MainPageState extends State<MainPage> {
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: '检查更新',
-                                        onPressed: () async {
-                                          try {
-                                            // 显示加载指示器
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Row(
-                                                  children: [
-                                                    SizedBox(
-                                                      width: 20,
-                                                      height: 20,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                            color: Colors.white,
-                                                          ),
-                                                    ),
-                                                    SizedBox(width: 16),
-                                                    Text('正在检查日历更新...'),
-                                                  ],
-                                                ),
-                                                duration: Duration(seconds: 2),
-                                              ),
-                                            );
-
-                                            // 检查并拉取更新
-                                            final updated = await calendarManager
-                                                .checkAndFetchCalendarUpdates(
-                                                  book.id,
-                                                );
-
-                                            // 显示操作结果
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  updated
-                                                      ? '已更新到最新日历数据'
-                                                      : '日历已是最新，无需更新',
-                                                ),
-                                                backgroundColor:
-                                                    updated
-                                                        ? Colors.green
-                                                        : Colors.blue,
-                                              ),
-                                            );
-
-                                            // 如果有更新且当前选中的就是这个日历，刷新日历页面显示最新数据
-                                            if (updated &&
-                                                book.id ==
-                                                    calendarManager
-                                                        .activeBook
-                                                        ?.id) {
-                                              // 刷新页面
-                                              SchedulePage.refreshSchedules(
-                                                context,
-                                              );
-                                              TaskPage.refreshTasks(context);
-                                            }
-                                          } catch (e) {
-                                            // 显示错误信息
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              SnackBar(
-                                                content: Text('更新失败: $e'),
-                                                backgroundColor: Colors.red,
-                                              ),
-                                            );
-                                          }
-                                        },
+                                        onPressed: () => SyncHelper.syncCalendar(
+                                          context: context,
+                                          calendarBook: book,
+                                          calendarManager: calendarManager,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -970,6 +807,9 @@ class _MainPageState extends State<MainPage> {
 
                   // 关闭输入对话框
                   Navigator.of(context).pop();
+                  
+                  // 关闭侧边栏
+                  Navigator.pop(context); // 添加这行代码来关闭侧边栏
 
                   // 使用全局 ScaffoldMessengerState 而非依赖于传入的 context
                   final scaffoldMessenger = ScaffoldMessenger.of(context);
@@ -1055,7 +895,6 @@ class _MainPageState extends State<MainPage> {
                 }
               },
               child: const Text('导入'),
-              //点击导入后应该关闭对话框和侧边栏。
             ),
           ],
         );
@@ -1488,13 +1327,31 @@ class _MainPageState extends State<MainPage> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.copy),
-                      onPressed: () {
-                        // 在实际应用中，这里应该调用剪贴板API
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('已复制到剪贴板')),
-                        );
+                      onPressed: () async {
+                        if (shareId == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('分享码不存在'),
+                              backgroundColor: Colors.red,
+                              duration: Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          return;
+                        }
+                        // 使用 Clipboard 复制到剪贴板
+                        await Clipboard.setData(ClipboardData(text: shareId));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('分享码已复制到剪贴板'),
+                              duration: Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
                       },
-                    ), // 添加分享按钮
+                    ),
                   ],
                 ),
               ),
@@ -1722,11 +1579,18 @@ class _MainPageState extends State<MainPage> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.copy),
-                      onPressed: () {
-                        // 在实际应用中，这里应该调用剪贴板API
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('已复制到剪贴板')),
-                        );
+                      onPressed: () async {
+                        // 使用 Clipboard 复制到剪贴板
+                        await Clipboard.setData(ClipboardData(text: serverShareId));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('分享码已复制到剪贴板'),
+                              duration: Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
                       },
                     ),
                   ],

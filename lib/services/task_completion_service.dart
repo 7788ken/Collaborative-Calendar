@@ -84,7 +84,7 @@ class TaskCompletionService {
       
       // 立即在内存中更新状态
       final newStatus = !currentStatus;
-      scheduleData.updateTaskCompletionStatus(taskKey, newStatus);
+      await scheduleData.updateTaskCompletionStatus(taskKey, newStatus);
       
       debugPrint('任务完成状态服务：内存中已更新任务"${schedule.title}"的完成状态为: $newStatus');
       
@@ -150,11 +150,18 @@ class TaskCompletionService {
         if (calendarBook.isShared) {
           debugPrint('任务完成状态服务：检测到共享日历的任务状态变更，准备同步到云端...');
           
-          // 同步特定任务到云端 - 不依赖UI状态
+          // 获取分享码
+          final shareCode = calendarManager.getShareId(schedule.calendarId);
+          if (shareCode == null || shareCode.isEmpty) {
+            throw Exception('无法获取分享码');
+          }
+          
+          // 使用新的 API 方法更新任务状态
           try {
-            final success = await calendarManager.syncSharedCalendarSchedules(
-              schedule.calendarId,
-              specificScheduleId: schedule.id
+            final success = await calendarManager.syncSpecificTask(
+              shareCode,
+              schedule.id,
+              newStatus
             );
             
             if (success) {
