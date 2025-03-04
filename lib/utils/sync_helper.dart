@@ -221,13 +221,13 @@ class SyncHelper {
     );
 
     // 如果设置了自动关闭，2秒后自动关闭对话框
-    if (autoClose) {
-      Future.delayed(const Duration(seconds: 2), () {
-        if (context.mounted) {
-          Navigator.of(context).pop();
-        }
-      });
-    }
+    // if (autoClose) {
+    //   Future.delayed(const Duration(seconds: 2), () {
+    //     if (context.mounted) {
+    //       Navigator.of(context).pop(); // 关闭对话框
+    //     }
+    //   });
+    // }
   }
 
   /// 格式化最后更新时间的显示

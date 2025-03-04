@@ -42,6 +42,25 @@ class TaskCompletionService {
         debugPrint('任务完成状态服务：组件已销毁，取消操作');
         return;
       }
+      
+      // 检查是否存在侧边栏
+      final scaffold = Scaffold.maybeOf(context);
+      final hasEndDrawer = scaffold?.hasEndDrawer ?? false;
+      
+      // 如果存在侧边栏且处于打开状态，则延迟关闭它
+      if (hasEndDrawer && scaffold!.isEndDrawerOpen) {
+        debugPrint('任务完成状态服务：检测到侧边栏打开，准备延迟关闭');
+        Future.delayed(const Duration(milliseconds: 100), () async {
+          if (context.mounted) {
+            final navigator = Navigator.of(context, rootNavigator: false);
+            if (await navigator.maybePop()) {
+              debugPrint('任务完成状态服务：已关闭侧边栏');
+            } else {
+              debugPrint('任务完成状态服务：无法关闭侧边栏，可能已经关闭');
+            }
+          }
+        });
+      }
     } catch (e) {
       debugPrint('任务完成状态服务：获取组件状态时出错：$e');
       return;
@@ -130,12 +149,9 @@ class TaskCompletionService {
     debugPrint('任务完成状态服务：开始执行后台任务（数据库更新和云同步）');
     
     try {
-      // 更新数据库中的任务完成状态 - 无需依赖UI组件状态
-      await _updateScheduleCompletionInDatabase(schedule, newStatus);
-      
       // 检查是否需要同步到云端
       if (!state.mounted) {
-        debugPrint('任务完成状态服务：组件已销毁，跳过云同步');
+        debugPrint('任务完成状态服务：组件已销毁，跳过同步');
         return;
       }
       
@@ -166,13 +182,20 @@ class TaskCompletionService {
             
             if (success) {
               debugPrint('任务完成状态服务：云端同步成功');
+              
+              // 更新数据库中的任务完成状态 - 仅在云端同步成功后更新本地
+              await _updateScheduleCompletionInDatabase(schedule, newStatus);
             } else {
-              debugPrint('任务完成状态服务：云端同步失败，但本地更新已完成');
+              debugPrint('任务完成状态服务：云端同步失败，回滚本地状态');
+              // TODO: 考虑添加重试机制或回滚本地状态
             }
           } catch (e) {
             debugPrint('任务完成状态服务：同步到云端时出错: $e');
             // 不抛出异常，避免影响用户体验
           }
+        } else {
+          // 非共享日历，只更新本地数据库
+          await _updateScheduleCompletionInDatabase(schedule, newStatus);
         }
       } catch (e) {
         debugPrint('任务完成状态服务：查找日历本或同步过程中出错: $e');
