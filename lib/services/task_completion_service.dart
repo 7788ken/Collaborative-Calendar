@@ -172,8 +172,17 @@ class TaskCompletionService {
             throw Exception('无法获取分享码');
           }
           
-          // 使用新的 API 方法更新任务状态
+          // 先更新本地数据库
+          final updatedSchedule = schedule.copyWith(isCompleted: newStatus);
+          final scheduleService = ScheduleService();
+          
           try {
+            debugPrint('任务完成状态服务：更新本地数据库...');
+            await scheduleService.updateSchedule(updatedSchedule);
+            debugPrint('任务完成状态服务：本地数据库更新成功');
+            
+            // 同步到云端
+            debugPrint('任务完成状态服务：开始同步到云端...');
             final success = await calendarManager.syncSpecificTask(
               shareCode,
               schedule.id,
@@ -183,22 +192,49 @@ class TaskCompletionService {
             if (success) {
               debugPrint('任务完成状态服务：云端同步成功');
               
-              // 更新数据库中的任务完成状态 - 仅在云端同步成功后更新本地
-              await _updateScheduleCompletionInDatabase(schedule, newStatus);
+              // 重新获取最新的日程数据
+              debugPrint('任务完成状态服务：准备获取最新的日程数据...');
+              await calendarManager.fetchSharedCalendarUpdates(schedule.calendarId);
+              debugPrint('任务完成状态服务：已获取最新的日程数据');
             } else {
-              debugPrint('任务完成状态服务：云端同步失败，回滚本地状态');
-              // TODO: 考虑添加重试机制或回滚本地状态
+              debugPrint('任务完成状态服务：云端同步失败，尝试回滚本地状态');
+              // 回滚本地状态
+              try {
+                final originalSchedule = schedule.copyWith(isCompleted: !newStatus);
+                await scheduleService.updateSchedule(originalSchedule);
+                debugPrint('任务完成状态服务：本地状态已回滚');
+              } catch (e) {
+                debugPrint('任务完成状态服务：回滚本地状态时出错: $e');
+              }
             }
           } catch (e) {
-            debugPrint('任务完成状态服务：同步到云端时出错: $e');
-            // 不抛出异常，避免影响用户体验
+            debugPrint('任务完成状态服务：更新本地数据库或同步到云端时出错: $e');
+            // 尝试回滚内存中的状态
+            try {
+              final scheduleData = Provider.of<ScheduleData>(state.context, listen: false);
+              final taskKey = '${schedule.startTime.year}-${schedule.startTime.month}-${schedule.startTime.day}-${schedule.id}';
+              await scheduleData.updateTaskCompletionStatus(taskKey, !newStatus);
+              debugPrint('任务完成状态服务：内存状态已回滚');
+            } catch (e) {
+              debugPrint('任务完成状态服务：回滚内存状态时出错: $e');
+            }
           }
         } else {
           // 非共享日历，只更新本地数据库
+          debugPrint('任务完成状态服务：非共享日历，仅更新本地数据库');
           await _updateScheduleCompletionInDatabase(schedule, newStatus);
         }
       } catch (e) {
         debugPrint('任务完成状态服务：查找日历本或同步过程中出错: $e');
+        // 尝试回滚内存中的状态
+        try {
+          final scheduleData = Provider.of<ScheduleData>(state.context, listen: false);
+          final taskKey = '${schedule.startTime.year}-${schedule.startTime.month}-${schedule.startTime.day}-${schedule.id}';
+          await scheduleData.updateTaskCompletionStatus(taskKey, !newStatus);
+          debugPrint('任务完成状态服务：内存状态已回滚');
+        } catch (e) {
+          debugPrint('任务完成状态服务：回滚内存状态时出错: $e');
+        }
       }
     } catch (e) {
       debugPrint('任务完成状态服务：后台操作执行过程中发生错误: $e');

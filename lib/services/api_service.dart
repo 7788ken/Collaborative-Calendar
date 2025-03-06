@@ -497,52 +497,77 @@ class ApiService {
             
             // 确保返回的日程格式正确
             List<dynamic> processedSchedules = schedules.map((schedule) {
-              // 打印每个日程的startTime和endTime类型
-              debugPrint('Schedule ${schedule['id']} startTime type: ${schedule['startTime'].runtimeType}');
-              debugPrint('Schedule ${schedule['id']} endTime type: ${schedule['endTime'].runtimeType}');
+              // 打印每个日程的详细信息用于调试
+              debugPrint('处理日程: ${schedule['title']} (ID: ${schedule['id']})');
+              debugPrint('原始数据: $schedule');
               
               // 确保startTime和endTime是整数时间戳格式
               var startTime = schedule['startTime'];
               var endTime = schedule['endTime'];
               
-              // 如果服务器返回的是JavaScript Date.getTime()结果，应该直接是数字
-              // 不需要特殊处理，但为了健壮性，我们检查一下
+              // 处理开始时间
               if (startTime is! int) {
-                debugPrint('警告: startTime不是整数: $startTime');
-                // 尝试转换为整数
+                debugPrint('警告: startTime不是整数: $startTime (类型: ${startTime.runtimeType})');
                 if (startTime is String) {
                   try {
-                    startTime = int.parse(startTime);
+                    if (startTime.contains('T') || startTime.contains(' ')) {
+                      // 如果是ISO格式或标准日期时间格式
+                      startTime = DateTime.parse(startTime).millisecondsSinceEpoch;
+                    } else {
+                      // 如果是纯数字字符串
+                      startTime = int.parse(startTime);
+                    }
+                    debugPrint('成功转换startTime为时间戳: $startTime');
                   } catch (e) {
                     debugPrint('无法将startTime解析为整数: $e');
-                    // 使用当前时间作为后备
                     startTime = DateTime.now().millisecondsSinceEpoch;
                   }
+                } else {
+                  startTime = DateTime.now().millisecondsSinceEpoch;
                 }
               }
               
+              // 处理结束时间
               if (endTime is! int) {
-                debugPrint('警告: endTime不是整数: $endTime');
-                // 尝试转换为整数
+                debugPrint('警告: endTime不是整数: $endTime (类型: ${endTime.runtimeType})');
                 if (endTime is String) {
                   try {
-                    endTime = int.parse(endTime);
+                    if (endTime.contains('T') || endTime.contains(' ')) {
+                      // 如果是ISO格式或标准日期时间格式
+                      endTime = DateTime.parse(endTime).millisecondsSinceEpoch;
+                    } else {
+                      // 如果是纯数字字符串
+                      endTime = int.parse(endTime);
+                    }
+                    debugPrint('成功转换endTime为时间戳: $endTime');
                   } catch (e) {
                     debugPrint('无法将endTime解析为整数: $e');
-                    // 使用当前时间作为后备
-                    endTime = DateTime.now().millisecondsSinceEpoch;
+                    // 使用开始时间加一小时作为默认结束时间
+                    endTime = startTime + (60 * 60 * 1000);
                   }
+                } else {
+                  // 使用开始时间加一小时作为默认结束时间
+                  endTime = startTime + (60 * 60 * 1000);
                 }
               }
               
-              // 返回处理后的日程
-              return {
-                ...schedule,
+              // 处理其他字段
+              final processedSchedule = {
+                'id': schedule['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                'title': schedule['title'] ?? '无标题',
+                'description': schedule['description'] ?? '',
+                'location': schedule['location'] ?? '',
                 'startTime': startTime,
-                'endTime': endTime
+                'endTime': endTime,
+                'isAllDay': schedule['isAllDay'] == 1 || schedule['isAllDay'] == true ? 1 : 0,
+                'isCompleted': schedule['isCompleted'] == 1 || schedule['isCompleted'] == true ? 1 : 0,
               };
+              
+              debugPrint('处理后的日程数据: $processedSchedule');
+              return processedSchedule;
             }).toList();
             
+            debugPrint('成功处理 ${processedSchedules.length} 个日程');
             return processedSchedules;
           } else if (data.containsKey('success') && data['success'] == false) {
             // 处理明确的错误响应
@@ -556,7 +581,81 @@ class ApiService {
         } else if (data is List) {
           // 如果直接返回日程列表
           debugPrint('服务器直接返回了日程列表，数量: ${data.length}');
-          return data;
+          
+          // 处理列表中的每个日程
+          List<dynamic> processedSchedules = data.map((schedule) {
+            // 打印每个日程的详细信息用于调试
+            debugPrint('处理日程: ${schedule['title']} (ID: ${schedule['id']})');
+            debugPrint('原始数据: $schedule');
+            
+            // 确保startTime和endTime是整数时间戳格式
+            var startTime = schedule['startTime'];
+            var endTime = schedule['endTime'];
+            
+            // 处理开始时间
+            if (startTime is! int) {
+              debugPrint('警告: startTime不是整数: $startTime (类型: ${startTime.runtimeType})');
+              if (startTime is String) {
+                try {
+                  if (startTime.contains('T') || startTime.contains(' ')) {
+                    // 如果是ISO格式或标准日期时间格式
+                    startTime = DateTime.parse(startTime).millisecondsSinceEpoch;
+                  } else {
+                    // 如果是纯数字字符串
+                    startTime = int.parse(startTime);
+                  }
+                  debugPrint('成功转换startTime为时间戳: $startTime');
+                } catch (e) {
+                  debugPrint('无法将startTime解析为整数: $e');
+                  startTime = DateTime.now().millisecondsSinceEpoch;
+                }
+              } else {
+                startTime = DateTime.now().millisecondsSinceEpoch;
+              }
+            }
+            
+            // 处理结束时间
+            if (endTime is! int) {
+              debugPrint('警告: endTime不是整数: $endTime (类型: ${endTime.runtimeType})');
+              if (endTime is String) {
+                try {
+                  if (endTime.contains('T') || endTime.contains(' ')) {
+                    // 如果是ISO格式或标准日期时间格式
+                    endTime = DateTime.parse(endTime).millisecondsSinceEpoch;
+                  } else {
+                    // 如果是纯数字字符串
+                    endTime = int.parse(endTime);
+                  }
+                  debugPrint('成功转换endTime为时间戳: $endTime');
+                } catch (e) {
+                  debugPrint('无法将endTime解析为整数: $e');
+                  // 使用开始时间加一小时作为默认结束时间
+                  endTime = startTime + (60 * 60 * 1000);
+                }
+              } else {
+                // 使用开始时间加一小时作为默认结束时间
+                endTime = startTime + (60 * 60 * 1000);
+              }
+            }
+            
+            // 处理其他字段
+            final processedSchedule = {
+              'id': schedule['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+              'title': schedule['title'] ?? '无标题',
+              'description': schedule['description'] ?? '',
+              'location': schedule['location'] ?? '',
+              'startTime': startTime,
+              'endTime': endTime,
+              'isAllDay': schedule['isAllDay'] == 1 || schedule['isAllDay'] == true ? 1 : 0,
+              'isCompleted': schedule['isCompleted'] == 1 || schedule['isCompleted'] == true ? 1 : 0,
+            };
+            
+            debugPrint('处理后的日程数据: $processedSchedule');
+            return processedSchedule;
+          }).toList();
+          
+          debugPrint('成功处理 ${processedSchedules.length} 个日程');
+          return processedSchedules;
         } else {
           debugPrint('无法识别的响应数据格式: $data');
           return [];

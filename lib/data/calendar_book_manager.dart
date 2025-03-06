@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import 'package:http/http.dart' as http;
 import 'dart:async'; // 添加Timer支持
 import '../services/api_auth_service.dart';
+import 'package:sqflite/sqflite.dart'; // 添加 sqflite 导入
 
 // 日历本管理类
 class CalendarBookManager with ChangeNotifier {
@@ -1201,72 +1202,197 @@ class CalendarBookManager with ChangeNotifier {
         debugPrint('已更新日历本信息: 名称=$name, 颜色=$colorHex');
       }
       
-      // 获取当前日历的所有日程用于后续比较
-      final existingSchedules = await _dbHelper.getSchedules(calendarId);
-      debugPrint('当前日历中有 ${existingSchedules.length} 个日程');
-      
       // 从API获取最新日程
       final schedulesData = await _apiService.getSchedules(shareCode);
       debugPrint('从服务器获取到 ${schedulesData.length} 个日程');
+      
+      if (schedulesData.isEmpty) {
+        debugPrint('警告：服务器返回空的日程列表');
+        return;
+      }
       
       // 保存当前任务完成状态，以便在导入新数据后恢复
       final taskCompletionStatus = await _getTaskStatusForCalendar(calendarId);
       debugPrint('已保存 ${taskCompletionStatus.length} 个任务完成状态记录');
       
-      // 清除旧的日程
-      await _dbHelper.deleteAllSchedulesInCalendar(calendarId);
-      debugPrint('已清除旧的日程数据');
+      // 获取当前日历的所有日程用于后续比较
+      final existingSchedules = await _dbHelper.getSchedules(calendarId);
+      debugPrint('当前日历中有 ${existingSchedules.length} 个日程');
       
-      // 准备用于保存任务完成状态的SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
+      // 清除旧的日程前先进行备份
+      final backupSchedules = List<ScheduleItem>.from(existingSchedules);
       
-      // 保存新的日程
-      int importedCount = 0;
-      for (final scheduleData in schedulesData) {
-        try {
-          final schedule = await _createScheduleFromApiData(scheduleData, calendarId);
-          await _dbHelper.insertSchedule(schedule);
-          importedCount++;
+      try {
+        // 开始数据库事务
+        final db = await _dbHelper.database;
+        await db.transaction((txn) async {
+          // 清除旧的日程
+          await txn.delete(
+            'schedules',
+            where: 'calendar_id = ?',
+            whereArgs: [calendarId],
+          );
+          debugPrint('已清除旧的日程数据');
           
-          // 恢复任务完成状态
-          if (taskCompletionStatus.containsKey(schedule.id)) {
-            final isCompleted = taskCompletionStatus[schedule.id] ?? false;
-            if (isCompleted) {
-              // 创建一个新的日程对象，设置完成状态为true
-              final updatedSchedule = ScheduleItem(
-                id: schedule.id,
-                calendarId: schedule.calendarId,
-                title: schedule.title,
-                description: schedule.description,
-                startTime: schedule.startTime,
-                endTime: schedule.endTime,
-                isAllDay: schedule.isAllDay,
-                location: schedule.location,
-                isCompleted: true,
+          // 导入新的日程
+          int successCount = 0;
+          List<String> failedSchedules = [];
+          
+          for (var scheduleData in schedulesData) {
+            try {
+              // 确保日期字段是整数时间戳
+              var startTime = scheduleData['startTime'];
+              var endTime = scheduleData['endTime'];
+              
+              if (startTime == null || endTime == null) {
+                debugPrint('警告: 日程缺少开始或结束时间，跳过');
+                continue;
+              }
+              
+              // 处理开始时间
+              DateTime startDateTime;
+              if (startTime is int) {
+                startDateTime = DateTime.fromMillisecondsSinceEpoch(startTime);
+              } else if (startTime is String) {
+                try {
+                  if (startTime.contains('T') || startTime.contains(' ')) {
+                    startDateTime = DateTime.parse(startTime);
+                  } else {
+                    startDateTime = DateTime.fromMillisecondsSinceEpoch(int.parse(startTime));
+                  }
+                } catch (e) {
+                  debugPrint('解析开始时间失败: $e，使用当前时间');
+                  startDateTime = DateTime.now();
+                }
+              } else {
+                debugPrint('无效的开始时间格式: $startTime，使用当前时间');
+                startDateTime = DateTime.now();
+              }
+              
+              // 处理结束时间
+              DateTime endDateTime;
+              if (endTime is int) {
+                endDateTime = DateTime.fromMillisecondsSinceEpoch(endTime);
+              } else if (endTime is String) {
+                try {
+                  if (endTime.contains('T') || endTime.contains(' ')) {
+                    endDateTime = DateTime.parse(endTime);
+                  } else {
+                    endDateTime = DateTime.fromMillisecondsSinceEpoch(int.parse(endTime));
+                  }
+                } catch (e) {
+                  debugPrint('解析结束时间失败: $e，使用开始时间加一小时');
+                  endDateTime = startDateTime.add(const Duration(hours: 1));
+                }
+              } else {
+                debugPrint('无效的结束时间格式: $endTime，使用开始时间加一小时');
+                endDateTime = startDateTime.add(const Duration(hours: 1));
+              }
+              
+              // 获取日程ID
+              final scheduleId = scheduleData['id'] as String? ?? const Uuid().v4();
+              
+              // 检查是否有保存的完成状态
+              bool isCompleted = false;
+              if (taskCompletionStatus.containsKey(scheduleId)) {
+                isCompleted = taskCompletionStatus[scheduleId]!;
+                debugPrint('使用保存的完成状态: $scheduleId = $isCompleted');
+              } else {
+                // 如果没有保存的状态，使用服务器返回的状态
+                isCompleted = scheduleData['isCompleted'] == 1 || scheduleData['isCompleted'] == true;
+                debugPrint('使用服务器返回的完成状态: $scheduleId = $isCompleted');
+              }
+              
+              // 创建日程对象
+              final schedule = ScheduleItem(
+                id: scheduleId,
+                calendarId: calendarId,
+                title: scheduleData['title'] as String? ?? '无标题',
+                description: scheduleData['description'] as String?,
+                startTime: startDateTime,
+                endTime: endDateTime,
+                isAllDay: scheduleData['isAllDay'] == 1 || scheduleData['isAllDay'] == true,
+                location: scheduleData['location'] as String?,
+                isCompleted: isCompleted,
               );
               
-              // 更新本地数据库中的完成状态
-              await _dbHelper.updateSchedule(updatedSchedule);
+              // 插入日程
+              await txn.insert(
+                'schedules',
+                schedule.toMap(),
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
               
-              // 保存到SharedPreferences
-              await prefs.setBool('task_completed_${schedule.id}', true);
+              // 保存完成状态到 SharedPreferences
+              if (isCompleted) {
+                final prefs = await SharedPreferences.getInstance();
+                final taskKey = 'task_completed_${schedule.id}';
+                await prefs.setBool(taskKey, true);
+                debugPrint('已保存任务完成状态: $taskKey = true');
+              }
+              
+              successCount++;
+            } catch (e) {
+              debugPrint('导入单个日程时出错: $e');
+              failedSchedules.add(scheduleData['id'] as String? ?? '未知ID');
+              // 继续处理其他日程
             }
           }
+          
+          debugPrint('成功导入 $successCount 个日程');
+          if (failedSchedules.isNotEmpty) {
+            debugPrint('导入失败的日程: $failedSchedules');
+          }
+        });
+        
+        // 更新最后同步时间
+        final serverUpdateTime = await _apiService.getCalendarLastUpdateTime(shareCode);
+        if (serverUpdateTime != null) {
+          _lastUpdateTimeMap[calendarId] = serverUpdateTime;
+          
+          // 保存最后同步时间到SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          final syncTimeKey = 'last_sync_time_$calendarId';
+          await prefs.setInt(syncTimeKey, serverUpdateTime.millisecondsSinceEpoch);
+          debugPrint('已更新最后同步时间: $serverUpdateTime');
+        }
+        
+        // 通知监听器更新UI
+        notifyListeners();
+        
+      } catch (e) {
+        debugPrint('导入日程时出错: $e');
+        
+        // 尝试恢复备份
+        try {
+          debugPrint('正在恢复备份数据...');
+          final db = await _dbHelper.database;
+          await db.transaction((txn) async {
+            // 清除可能已导入的数据
+            await txn.delete(
+              'schedules',
+              where: 'calendar_id = ?',
+              whereArgs: [calendarId],
+            );
+            
+            // 恢复备份数据
+            for (var schedule in backupSchedules) {
+              await txn.insert(
+                'schedules',
+                schedule.toMap(),
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            }
+          });
+          debugPrint('成功恢复备份数据');
         } catch (e) {
-          debugPrint('导入日程时出错: $e');
-          // 继续处理下一个日程
-          continue;
+          debugPrint('恢复备份数据时出错: $e');
+          // 如果恢复备份也失败，抛出异常
+          rethrow;
         }
       }
-      
-      debugPrint('成功导入 $importedCount 个日程');
-      
-      // 注意：不再在这里更新最后同步时间，因为这个操作已经在checkAndFetchCalendarUpdates方法中完成了
-      
-      // 通知监听器更新UI
-      notifyListeners();
     } catch (e) {
-      debugPrint('从云端获取日历更新时出错: $e');
+      debugPrint('获取日历更新时出错: $e');
       rethrow;
     }
   }
@@ -1321,35 +1447,74 @@ class CalendarBookManager with ChangeNotifier {
 
       debugPrint('开始同步任务: shareCode=$shareCode, scheduleId=$scheduleId, isCompleted=$isCompleted');
 
+      // 获取日程的当前数据
+      final schedules = await _dbHelper.getScheduleById(scheduleId);
+      if (schedules.isEmpty) {
+        debugPrint('同步任务失败：找不到日程 $scheduleId');
+        return false;
+      }
+
+      final schedule = schedules.first;
+      final calendarId = schedule.calendarId;
+
       // 生成认证头
       final path = '/api/calendars/$shareCode/schedules/$scheduleId';
       final headers = ApiAuthService.generateAuthHeaders(path);
 
-      // 调用 API 更新状态
-      final result = await _apiService.updateScheduleStatus(
-        shareCode,
-        scheduleId,
-        isCompleted,
-        headers: headers,
-      );
+      try {
+        // 先更新本地数据库
+        final updatedSchedule = schedule.copyWith(isCompleted: isCompleted);
+        await _dbHelper.updateSchedule(updatedSchedule);
+        debugPrint('本地数据库更新成功');
 
-      if (result['success'] == true) {
-        // 更新本地数据库
-        await _dbHelper.updateScheduleSyncStatus(scheduleId, true);
+        // 调用 API 更新状态
+        final result = await _apiService.updateScheduleStatus(
+          shareCode,
+          scheduleId,
+          isCompleted,
+          headers: headers,
+        );
 
-        // 更新 SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        final key = 'task_completed_$scheduleId';
-        if (isCompleted) {
-          await prefs.setBool(key, true);
+        if (result['success'] == true) {
+          debugPrint('云端更新成功，开始获取最新数据');
+
+          // 更新本地同步状态
+          await _dbHelper.updateScheduleSyncStatus(scheduleId, true);
+
+          // 更新 SharedPreferences 中的任务状态
+          final prefs = await SharedPreferences.getInstance();
+          final key = 'task_completed_$scheduleId';
+          if (isCompleted) {
+            await prefs.setBool(key, true);
+            debugPrint('已更新SharedPreferences: $key = true');
+          } else {
+            await prefs.remove(key);
+            debugPrint('已从SharedPreferences移除: $key');
+          }
+
+          // 重新获取最新的日历数据
+          await fetchSharedCalendarUpdates(calendarId);
+          debugPrint('已获取最新的日历数据');
+
+          return true;
         } else {
-          await prefs.remove(key);
-        }
+          debugPrint('云端更新失败：${result['message']}');
+          
+          // 回滚本地数据库
+          final originalSchedule = schedule.copyWith(isCompleted: !isCompleted);
+          await _dbHelper.updateSchedule(originalSchedule);
+          debugPrint('已回滚本地数据库状态');
 
-        debugPrint('任务同步成功');
-        return true;
-      } else {
-        debugPrint('任务同步失败：${result['message']}');
+          return false;
+        }
+      } catch (e) {
+        debugPrint('API调用或数据库操作出错: $e');
+        
+        // 回滚本地数据库
+        final originalSchedule = schedule.copyWith(isCompleted: !isCompleted);
+        await _dbHelper.updateSchedule(originalSchedule);
+        debugPrint('已回滚本地数据库状态');
+
         return false;
       }
     } catch (e) {

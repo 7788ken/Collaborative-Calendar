@@ -244,58 +244,94 @@ class DatabaseHelper {
   // 更新日程
   Future<void> updateSchedule(ScheduleItem schedule) async {
     try {
-      print('数据库助手: 开始更新日程 ${schedule.title}，ID: ${schedule.id}');
-      print('数据库助手: 日程所属日历本ID: ${schedule.calendarId}');
-      print('数据库助手: 更新的日程详情：${schedule.toMap()}');
+      debugPrint('数据库助手: 开始更新日程 ${schedule.title}，ID: ${schedule.id}');
+      debugPrint('数据库助手: 日程所属日历本ID: ${schedule.calendarId}');
+      debugPrint('数据库助手: 更新的日程详情：${schedule.toMap()}');
       
-      // 查询原始记录，用于比较
       final db = await database;
-      final originalRecords = await db.query(
-        'schedules',
-        where: 'id = ?',
-        whereArgs: [schedule.id],
-      );
       
-      if (originalRecords.isNotEmpty) {
-        final originalCalendarId = originalRecords.first['calendar_id'];
-        print('数据库助手: 原始日程所属日历本ID: $originalCalendarId');
-        print('数据库助手: 新日程所属日历本ID: ${schedule.calendarId}');
-        
-        if (originalCalendarId != schedule.calendarId) {
-          print('数据库助手: 警告! 日历本ID发生变化! 原ID=$originalCalendarId, 新ID=${schedule.calendarId}');
-        }
-      }
-      
-      final updateCount = await db.update(
-        'schedules',
-        schedule.toMap(),
-        where: 'id = ?',
-        whereArgs: [schedule.id],
-      );
-      
-      if (updateCount > 0) {
-        print('数据库助手: 日程更新成功，更新了 $updateCount 条记录');
-      } else {
-        print('数据库助手: 警告 - 日程更新未修改任何记录，可能ID不存在: ${schedule.id}');
-        print('数据库助手: 检查是否存在该ID的记录...');
-        
-        final result = await db.query(
+      // 开始事务
+      await db.transaction((txn) async {
+        // 查询原始记录，用于比较
+        final originalRecords = await txn.query(
           'schedules',
           where: 'id = ?',
           whereArgs: [schedule.id],
         );
         
-        if (result.isEmpty) {
-          print('数据库助手: 确认ID不存在，尝试插入新记录');
-          await db.insert('schedules', schedule.toMap());
-          print('数据库助手: 成功插入了新记录，ID: ${schedule.id}');
+        if (originalRecords.isNotEmpty) {
+          final originalCalendarId = originalRecords.first['calendar_id'];
+          debugPrint('数据库助手: 原始日程所属日历本ID: $originalCalendarId');
+          debugPrint('数据库助手: 新日程所属日历本ID: ${schedule.calendarId}');
+          
+          if (originalCalendarId != schedule.calendarId) {
+            debugPrint('数据库助手: 警告! 日历本ID发生变化! 原ID=$originalCalendarId, 新ID=${schedule.calendarId}');
+            
+            // 验证新的日历本是否存在
+            final calendarExists = await txn.query(
+              'calendars',
+              where: 'id = ?',
+              whereArgs: [schedule.calendarId],
+            );
+            
+            if (calendarExists.isEmpty) {
+              throw Exception('目标日历本不存在: ${schedule.calendarId}');
+            }
+          }
+          
+          // 更新记录
+          final updateCount = await txn.update(
+            'schedules',
+            schedule.toMap(),
+            where: 'id = ?',
+            whereArgs: [schedule.id],
+          );
+          
+          debugPrint('数据库助手: 更新操作影响的记录数: $updateCount');
+          
+          if (updateCount == 0) {
+            throw Exception('更新失败：没有记录被修改');
+          }
         } else {
-          print('数据库助手: ID存在但更新失败，可能数据未变化: ${result.first}');
+          debugPrint('数据库助手: 未找到原始记录，尝试插入新记录');
+          
+          // 验证日历本是否存在
+          final calendarExists = await txn.query(
+            'calendars',
+            where: 'id = ?',
+            whereArgs: [schedule.calendarId],
+          );
+          
+          if (calendarExists.isEmpty) {
+            throw Exception('目标日历本不存在: ${schedule.calendarId}');
+          }
+          
+          // 插入新记录
+          final insertResult = await txn.insert(
+            'schedules',
+            schedule.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          
+          debugPrint('数据库助手: 插入新记录成功，ID: $insertResult');
         }
+      });
+      
+      // 验证更新结果
+      final verifyResult = await db.query(
+        'schedules',
+        where: 'id = ?',
+        whereArgs: [schedule.id],
+      );
+      
+      if (verifyResult.isEmpty) {
+        throw Exception('更新后无法找到记录: ${schedule.id}');
       }
+      
+      debugPrint('数据库助手: 日程更新成功，最终结果: ${verifyResult.first}');
     } catch (e) {
-      print('数据库助手: 更新日程时出错: $e');
-      rethrow; // 重新抛出异常以便上层捕获
+      debugPrint('数据库助手: 更新日程时出错: $e');
+      rethrow;
     }
   }
   
