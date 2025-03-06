@@ -65,7 +65,9 @@ class ApiService {
     while (true) {
       attempts++;
       try {
+        debugPrint('ApiService: 尝试发送请求 (尝试 $attempts/$maxRetries)');
         final response = await requestFunc().timeout(defaultTimeout);
+        debugPrint('ApiService: 请求成功，状态码: ${response.statusCode}');
         return response;
       } catch (e) {
         // 如果达到最大重试次数，则抛出异常
@@ -187,10 +189,20 @@ class ApiService {
       debugPrint('开始获取共享日历信息，分享码: $shareCode');
       
       try {
+        // 生成API认证头
+        final String path = '/api/calendars/$shareCode';
+        final Map<String, String> headers = ApiAuthService.generateAuthHeaders(path);
+        
+        debugPrint('ApiService: 使用认证头: $headers');
+        
+        // 打印完整的请求信息用于调试
+        final Uri uri = Uri.parse('$baseUrl$path');
+        debugPrint('ApiService: 完整请求URL: $uri');
+        debugPrint('ApiService: 请求方法: GET');
+        debugPrint('ApiService: 请求头: $headers');
+        
         final response = await _makeRequestWithRetry(
-          requestFunc: () => http.get(
-            Uri.parse('$baseUrl/api/calendars/$shareCode'),
-          ),
+          requestFunc: () => http.get(uri, headers: headers),
         );
         
         debugPrint('服务器响应状态码: ${response.statusCode}');
@@ -198,6 +210,7 @@ class ApiService {
         // 检查HTTP状态码
         if (response.statusCode < 200 || response.statusCode >= 300) {
           debugPrint('服务器返回错误状态码: ${response.statusCode}');
+          debugPrint('服务器响应内容: ${response.body}');
           throw Exception('服务器返回错误状态码: ${response.statusCode}');
         }
         
@@ -347,16 +360,50 @@ class ApiService {
     // 先检查服务器状态
     await _checkServerBeforeRequest();
     
-    final response = await http.put(
-      Uri.parse('$baseUrl/api/calendars/$shareCode'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
+    try {
+      debugPrint('ApiService: 开始更新共享日历信息，shareCode=$shareCode');
+      
+      // 准备要发送的数据
+      final Map<String, dynamic> calendarData = {
         'name': name,
         'color': colorValue.toRadixString(16),
-      }),
-    );
-    
-    await _handleResponse(response);
+      };
+      
+      debugPrint('ApiService: 准备发送的数据: $calendarData');
+      
+      // 生成API认证头
+      final String path = '/api/calendars/$shareCode';
+      final Map<String, String> headers = ApiAuthService.generateAuthHeaders(path);
+      
+      debugPrint('ApiService: 使用认证头: $headers');
+      
+      // 打印完整的请求信息用于调试
+      final Uri uri = Uri.parse('$baseUrl$path');
+      debugPrint('ApiService: 完整请求URL: $uri');
+      debugPrint('ApiService: 请求方法: PUT');
+      debugPrint('ApiService: 请求头: $headers');
+      debugPrint('ApiService: 请求体: ${json.encode(calendarData)}');
+      
+      final response = await http.put(
+        uri,
+        headers: headers,
+        body: json.encode(calendarData),
+      );
+      
+      debugPrint('ApiService: 服务器响应状态码: ${response.statusCode}');
+      debugPrint('ApiService: 服务器响应内容: ${response.body}');
+      
+      if (response.statusCode >= 400) {
+        debugPrint('ApiService: 服务器返回错误: ${response.statusCode} - ${response.body}');
+        throw Exception('服务器返回错误: ${response.statusCode} - ${response.body}');
+      }
+      
+      final responseData = await _handleResponse(response);
+      debugPrint('ApiService: 日历更新成功，服务器响应: $responseData');
+    } catch (e) {
+      debugPrint('ApiService: 更新共享日历信息时出错: $e');
+      rethrow;
+    }
   }
   
   // 日程管理API
