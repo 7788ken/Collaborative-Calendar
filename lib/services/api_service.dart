@@ -5,6 +5,7 @@ import '../models/schedule_item.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'api_auth_service.dart'; // 添加导入
 
 class ApiService {
   static const String baseUrl = 'http://localhost:3002';
@@ -368,15 +369,18 @@ class ApiService {
     try {
       debugPrint('开始获取日历日程，分享码: $shareCode');
       
-      final Uri uri = Uri.parse('$baseUrl/api/calendars/$shareCode/schedules');
+      final String path = '/api/calendars/$shareCode/schedules';
+      final Uri uri = Uri.parse('$baseUrl$path');
       debugPrint('请求URL: $uri');
       
-      // 发送请求前向服务器提示正确的日期格式
-      final Map<String, String> headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Date-Format': 'timestamp' // 告诉服务器我们期望timestamp格式
-      };
+      // 生成API认证头
+      final Map<String, String> headers = ApiAuthService.generateAuthHeaders(path);
+      
+      // 添加其他必要的头信息
+      headers['Accept'] = 'application/json';
+      headers['X-Date-Format'] = 'timestamp'; // 告诉服务器我们期望timestamp格式
+      
+      debugPrint('ApiService: 使用认证头: $headers');
       
       final response = await _makeRequestWithRetry(
         requestFunc: () => http.get(uri, headers: headers),
@@ -499,7 +503,7 @@ class ApiService {
   Future<Map<String, dynamic>> addSchedule(String shareCode, ScheduleItem schedule) async {
     // 先检查服务器状态
     await _checkServerBeforeRequest();
-    
+  
     try {
       debugPrint('ApiService: 开始添加日程，shareCode=$shareCode, title=${schedule.title}');
       
@@ -517,22 +521,36 @@ class ApiService {
       
       debugPrint('ApiService: 准备发送的数据: $scheduleData');
       
+      // 生成API认证头
+      final String path = '/api/calendars/$shareCode/schedules';
+      final Map<String, String> headers = ApiAuthService.generateAuthHeaders(path);
+      
+      debugPrint('ApiService: 使用认证头: $headers');
+      
+      // 打印完整的请求信息用于调试
+      final Uri uri = Uri.parse('$baseUrl$path');
+      debugPrint('ApiService: 完整请求URL: $uri');
+      debugPrint('ApiService: 请求方法: POST');
+      debugPrint('ApiService: 请求头: $headers');
+      debugPrint('ApiService: 请求体: ${json.encode(scheduleData)}');
+      
       final response = await http.post(
-        Uri.parse('$baseUrl/api/calendars/$shareCode/schedules'),
-        headers: {'Content-Type': 'application/json'},
+        uri,
+        headers: headers,
         body: json.encode(scheduleData),
       );
       
-      debugPrint('ApiService: 添加请求响应状态: ${response.statusCode}');
+      debugPrint('ApiService: 服务器响应状态码: ${response.statusCode}');
+      debugPrint('ApiService: 服务器响应内容: ${response.body}');
       
       if (response.statusCode >= 400) {
-        debugPrint('ApiService: 添加请求失败，状态码: ${response.statusCode}, 内容: ${response.body}');
-        throw Exception('添加日程失败: ${response.statusCode}');
+        debugPrint('ApiService: 服务器返回错误: ${response.statusCode} - ${response.body}');
+        throw Exception('服务器返回错误: ${response.statusCode} - ${response.body}');
       }
       
-      final data = await _handleResponse(response);
-      debugPrint('ApiService: 添加请求完成，返回数据: $data');
-      return data;
+      final responseData = await _handleResponse(response);
+      debugPrint('ApiService: 日程添加成功，服务器响应: $responseData');
+      return responseData;
     } catch (e) {
       debugPrint('ApiService: 添加日程时出错: $e');
       rethrow;
@@ -540,43 +558,56 @@ class ApiService {
   }
   
   // 更新日程
-  Future<void> updateSchedule(String shareCode, String scheduleId, ScheduleItem schedule) async {
+  Future<Map<String, dynamic>> updateSchedule(String shareCode, String scheduleId, ScheduleItem schedule) async {
     // 先检查服务器状态
     await _checkServerBeforeRequest();
-    
+  
     try {
       debugPrint('ApiService: 开始更新日程，shareCode=$shareCode, scheduleId=$scheduleId');
       
-      // 准备请求数据，确保字段名称和格式与API期望的一致
-      // 使用毫秒时间戳格式
+      // 准备要发送的数据
       final Map<String, dynamic> scheduleData = {
-        'id': schedule.id,
         'title': schedule.title,
         'description': schedule.description ?? '',
         'location': schedule.location ?? '',
-        'startTime': schedule.startTime.millisecondsSinceEpoch, // 使用毫秒时间戳
-        'endTime': schedule.endTime.millisecondsSinceEpoch, // 使用毫秒时间戳
+        'startTime': schedule.startTime.millisecondsSinceEpoch,
+        'endTime': schedule.endTime.millisecondsSinceEpoch,
         'isAllDay': schedule.isAllDay ? 1 : 0,
         'isCompleted': schedule.isCompleted ? 1 : 0
       };
       
-      debugPrint('ApiService: 准备发送的数据: $scheduleData');
+      debugPrint('ApiService: 准备发送的更新数据: $scheduleData');
+      
+      // 生成API认证头
+      final String path = '/api/calendars/$shareCode/schedules/$scheduleId';
+      final Map<String, String> headers = ApiAuthService.generateAuthHeaders(path);
+      
+      debugPrint('ApiService: 使用认证头: $headers');
+      
+      // 打印完整的请求信息用于调试
+      final Uri uri = Uri.parse('$baseUrl$path');
+      debugPrint('ApiService: 完整请求URL: $uri');
+      debugPrint('ApiService: 请求方法: PUT');
+      debugPrint('ApiService: 请求头: $headers');
+      debugPrint('ApiService: 请求体: ${json.encode(scheduleData)}');
       
       final response = await http.put(
-        Uri.parse('$baseUrl/api/calendars/$shareCode/schedules/$scheduleId'),
-        headers: {'Content-Type': 'application/json'},
+        uri,
+        headers: headers,
         body: json.encode(scheduleData),
       );
       
-      debugPrint('ApiService: 更新请求响应状态: ${response.statusCode}');
+      debugPrint('ApiService: 服务器响应状态码: ${response.statusCode}');
+      debugPrint('ApiService: 服务器响应内容: ${response.body}');
       
       if (response.statusCode >= 400) {
-        debugPrint('ApiService: 更新请求失败，状态码: ${response.statusCode}, 内容: ${response.body}');
-        throw Exception('更新日程失败: ${response.statusCode}');
+        debugPrint('ApiService: 服务器返回错误: ${response.statusCode} - ${response.body}');
+        throw Exception('服务器返回错误: ${response.statusCode} - ${response.body}');
       }
       
-      await _handleResponse(response);
-      debugPrint('ApiService: 更新请求完成');
+      final responseData = await _handleResponse(response);
+      debugPrint('ApiService: 日程更新成功，服务器响应: $responseData');
+      return responseData;
     } catch (e) {
       debugPrint('ApiService: 更新日程时出错: $e');
       rethrow;
@@ -584,27 +615,41 @@ class ApiService {
   }
   
   // 删除日程
-  Future<void> deleteSchedule(String shareCode, String scheduleId) async {
+  Future<Map<String, dynamic>> deleteSchedule(String shareCode, String scheduleId) async {
     // 先检查服务器状态
     await _checkServerBeforeRequest();
-    
+  
     try {
-      // 服务器已经实现了软删除，使用DELETE请求时会将isDeleted字段设为true
-      debugPrint('ApiService: 发送删除请求，shareCode=$shareCode, scheduleId=$scheduleId');
+      debugPrint('ApiService: 开始删除日程，shareCode=$shareCode, scheduleId=$scheduleId');
+      
+      // 生成API认证头
+      final String path = '/api/calendars/$shareCode/schedules/$scheduleId';
+      final Map<String, String> headers = ApiAuthService.generateAuthHeaders(path);
+      
+      debugPrint('ApiService: 使用认证头: $headers');
+      
+      // 打印完整的请求信息用于调试
+      final Uri uri = Uri.parse('$baseUrl$path');
+      debugPrint('ApiService: 完整请求URL: $uri');
+      debugPrint('ApiService: 请求方法: DELETE');
+      debugPrint('ApiService: 请求头: $headers');
       
       final response = await http.delete(
-        Uri.parse('$baseUrl/api/calendars/$shareCode/schedules/$scheduleId'),
+        uri,
+        headers: headers,
       );
       
-      debugPrint('ApiService: 删除请求响应状态: ${response.statusCode}');
+      debugPrint('ApiService: 服务器响应状态码: ${response.statusCode}');
+      debugPrint('ApiService: 服务器响应内容: ${response.body}');
       
       if (response.statusCode >= 400) {
-        debugPrint('ApiService: 删除请求失败，状态码: ${response.statusCode}, 内容: ${response.body}');
-        throw Exception('删除日程失败: ${response.statusCode}');
+        debugPrint('ApiService: 服务器返回错误: ${response.statusCode} - ${response.body}');
+        throw Exception('服务器返回错误: ${response.statusCode} - ${response.body}');
       }
       
-      await _handleResponse(response);
-      debugPrint('ApiService: 删除请求完成');
+      final responseData = await _handleResponse(response);
+      debugPrint('ApiService: 日程删除成功，服务器响应: $responseData');
+      return responseData;
     } catch (e) {
       debugPrint('ApiService: 删除日程时出错: $e');
       rethrow;
@@ -829,9 +874,16 @@ class ApiService {
       // 防御性网络请求处理
       try {
         debugPrint('向服务器发送同步请求...');
+        
+        // 生成API认证头
+        final String path = '/api/calendars/$shareCode/sync';
+        final Map<String, String> headers = ApiAuthService.generateAuthHeaders(path);
+        
+        debugPrint('ApiService: 使用认证头: $headers');
+        
         final response = await http.post(
           Uri.parse('$baseUrl/api/calendars/$shareCode/sync'),
-          headers: {'Content-Type': 'application/json'},
+          headers: headers,
           body: json.encode({'changes': formattedChanges}),
         ).timeout(
           const Duration(seconds: 20),

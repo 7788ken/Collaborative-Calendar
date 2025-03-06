@@ -176,8 +176,11 @@ class ScheduleService {
   // 检查日历是否为共享日历，如果是则同步到云端
   Future<void> _syncToCloudIfNeeded(String calendarId) async {
     try {
+      print('ScheduleService: 开始检查是否需要同步到云端，日历ID: $calendarId');
+      
       // 确保CalendarBookManager已初始化
       if (!_calendarManager.books.any((book) => book.id == calendarId)) {
+        print('ScheduleService: CalendarBookManager未初始化，正在初始化...');
         await _calendarManager.init();
       }
       
@@ -187,10 +190,48 @@ class ScheduleService {
         orElse: () => throw Exception('未找到ID为 $calendarId 的日历本'),
       );
       
+      print('ScheduleService: 找到日历本: ${calendarBook.name}, 是否共享: ${calendarBook.isShared}');
+      
       // 如果是共享日历，则同步到云端
       if (calendarBook.isShared) {
         print('ScheduleService: 检测到共享日历，正在同步到云端...');
-        await _calendarManager.syncSharedCalendarSchedules(calendarId);
+        
+        // 获取分享码
+        final shareCode = _calendarManager.getShareId(calendarId);
+        print('ScheduleService: 获取到分享码: $shareCode');
+        
+        if (shareCode == null) {
+          throw Exception('未找到日历本的分享码');
+        }
+        
+        // 获取最新添加的日程数据（最后一条）
+        final schedules = await _dbHelper.getSchedules(calendarId);
+        print('ScheduleService: 获取到 ${schedules.length} 条日程');
+        
+        if (schedules.isEmpty) {
+          print('ScheduleService: 没有需要同步的日程');
+          return;
+        }
+        
+        // 只同步最新添加的日程（最后一条）
+        final latestSchedule = schedules.last;
+        print('ScheduleService: 同步最新添加的日程: ${latestSchedule.title}, ID: ${latestSchedule.id}');
+        print('ScheduleService: 日程详情: 开始时间=${latestSchedule.startTime}, 结束时间=${latestSchedule.endTime}, 全天=${latestSchedule.isAllDay}');
+        
+        // 使用API服务直接添加日程
+        final apiService = ApiService();
+        try {
+          print('ScheduleService: 开始调用API添加日程...');
+          final result = await apiService.addSchedule(shareCode, latestSchedule);
+          print('ScheduleService: 日程 ${latestSchedule.title} 同步到云端成功, 结果: $result');
+          
+          // 更新日程的同步状态
+          await _dbHelper.updateScheduleSyncStatus(latestSchedule.id, true);
+          print('ScheduleService: 已更新日程同步状态为已同步');
+        } catch (e) {
+          print('ScheduleService: 同步日程 ${latestSchedule.title} 到云端失败: $e');
+        }
+        
         print('ScheduleService: 云端同步完成');
       } else {
         print('ScheduleService: 本地日历，无需同步');
