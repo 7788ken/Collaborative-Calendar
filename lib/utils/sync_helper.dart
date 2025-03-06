@@ -61,8 +61,10 @@ class SyncHelper {
       if (!context.mounted) return false;
 
       // 显示同步结果
-      final now = DateTime.now();
-      final updateTimeText = formatLastUpdateTime(now);
+      // 获取本地数据库中的最后更新时间
+      final updateTime = calendarManager.getLastUpdateTime(calendarBook.id);
+      final updateTimeText = formatLastUpdateTime(updateTime);
+      
       _showSyncDialog(
         context: context,
         message: updated ? '已更新到最新日历数据\n最后更新: $updateTimeText' : '日历已是最新，无需更新',

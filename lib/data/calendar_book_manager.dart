@@ -96,38 +96,55 @@ class CalendarBookManager with ChangeNotifier {
       
       // 获取当前缓存的最后更新时间
       final currentUpdateTime = _lastUpdateTimeMap[calendarId];
+      debugPrint('本地最后更新时间: $currentUpdateTime');
       
       // 异步刷新最后修改时间，添加超时保护
       try {
         // 使用超时保护，防止长时间阻塞
-        final lastUpdateTime = await _apiService.getCalendarLastUpdateTime(shareCode)
+        final serverUpdateTime = await _apiService.getCalendarLastUpdateTime(shareCode)
             .timeout(const Duration(seconds: 15), onTimeout: () {
           debugPrint('获取日历 $calendarId 的最后修改时间超时');
           return null;
         });
         
-        if (lastUpdateTime != null) {
-          // 检查是否有更新（时间不同或者之前没有记录时间）
-          bool hasUpdate = currentUpdateTime == null || 
-                          lastUpdateTime.isAfter(currentUpdateTime);
-          
-          if (hasUpdate) {
-            debugPrint('检测到日历 $calendarId 有更新，最新时间: $lastUpdateTime，之前时间: $currentUpdateTime');
-            // 更新本地缓存的时间
-            _lastUpdateTimeMap[calendarId] = lastUpdateTime;
-            
-            // 触发自动拉取日程操作
-            _autoFetchCalendarSchedules(calendarId, shareCode);
-          } else {
-            debugPrint('日历 $calendarId 没有更新，最新时间: $lastUpdateTime');
-            _lastUpdateTimeMap[calendarId] = lastUpdateTime;
-          }
-          
-          // 通知监听器更新UI
-          notifyListeners();
-        } else {
+        debugPrint('服务器最后更新时间: $serverUpdateTime');
+        
+        // 如果服务器时间为空，则无法比较，直接返回
+        if (serverUpdateTime == null) {
           debugPrint('未能获取日历 $calendarId 的有效最后修改时间');
+          return;
         }
+        
+        // 检查是否有更新（时间不同或者之前没有记录时间）
+        bool hasUpdate = currentUpdateTime == null || 
+                        serverUpdateTime.isAfter(currentUpdateTime);
+        
+        if (hasUpdate) {
+          debugPrint('检测到服务器有更新，最新时间: $serverUpdateTime，本地时间: $currentUpdateTime');
+          // 更新本地缓存的时间为服务器时间
+          _lastUpdateTimeMap[calendarId] = serverUpdateTime;
+          
+          // 保存最后同步时间到SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          final syncTimeKey = 'last_sync_time_$calendarId';
+          await prefs.setInt(syncTimeKey, serverUpdateTime.millisecondsSinceEpoch);
+          debugPrint('已保存服务器更新时间到SharedPreferences: $serverUpdateTime');
+          
+          // 触发自动拉取日程操作
+          _autoFetchCalendarSchedules(calendarId, shareCode);
+        } else {
+          debugPrint('服务器没有更新，最新时间: $serverUpdateTime，本地时间: $currentUpdateTime');
+          
+          // 即使没有更新，也保存最后检查时间
+          // 注意：这里我们保存的是本地时间，而不是服务器时间，因为服务器没有更新
+          final prefs = await SharedPreferences.getInstance();
+          final syncTimeKey = 'last_sync_time_$calendarId';
+          await prefs.setInt(syncTimeKey, currentUpdateTime.millisecondsSinceEpoch);
+          debugPrint('已保存最后检查时间到SharedPreferences: $currentUpdateTime');
+        }
+        
+        // 通知监听器更新UI
+        notifyListeners();
       } catch (e) {
         // 捕获并记录错误，但不将其传播
         debugPrint('获取日历 $calendarId 的最后修改时间出错: $e');
@@ -179,24 +196,49 @@ class CalendarBookManager with ChangeNotifier {
       
       // 获取当前缓存的最后更新时间
       final currentUpdateTime = _lastUpdateTimeMap[calendarId];
+      debugPrint('本地最后更新时间: $currentUpdateTime');
       
       // 获取服务器最新的更新时间
-      final lastUpdateTime = await _apiService.getCalendarLastUpdateTime(shareCode);
+      final serverUpdateTime = await _apiService.getCalendarLastUpdateTime(shareCode);
+      debugPrint('服务器最后更新时间: $serverUpdateTime');
       
-      // 如果有更新或者没有记录过时间，则拉取数据
-      if (lastUpdateTime != null && 
-          (currentUpdateTime == null || lastUpdateTime.isAfter(currentUpdateTime))) {
-        debugPrint('检测到日历 $calendarId 有更新，开始拉取数据');
-        
-        // 更新缓存的时间
-        _lastUpdateTimeMap[calendarId] = lastUpdateTime;
-        notifyListeners();
+      // 如果服务器时间为空，则无法比较，返回false
+      if (serverUpdateTime == null) {
+        debugPrint('无法获取服务器更新时间，跳过更新');
+        return false;
+      }
+      
+      // 如果本地没有记录过时间，或者服务器时间比本地时间新，则拉取数据
+      if (currentUpdateTime == null || serverUpdateTime.isAfter(currentUpdateTime)) {
+        debugPrint('检测到服务器有更新，开始拉取数据');
+        debugPrint('服务器时间: $serverUpdateTime, 本地时间: $currentUpdateTime');
         
         // 拉取最新数据
         await fetchSharedCalendarUpdates(calendarId);
+        
+        // 更新缓存的时间为服务器时间
+        _lastUpdateTimeMap[calendarId] = serverUpdateTime;
+        
+        // 保存最后同步时间到SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        final syncTimeKey = 'last_sync_time_$calendarId';
+        await prefs.setInt(syncTimeKey, serverUpdateTime.millisecondsSinceEpoch);
+        debugPrint('已保存服务器更新时间到SharedPreferences: $serverUpdateTime');
+        
+        notifyListeners();
+        
         return true;
       } else {
-        debugPrint('日历 $calendarId 没有检测到更新，跳过拉取');
+        debugPrint('服务器没有更新，跳过拉取');
+        debugPrint('服务器时间: $serverUpdateTime, 本地时间: $currentUpdateTime');
+        
+        // 即使没有更新，也更新最后检查时间
+        // 注意：这里我们保存的是本地时间，而不是服务器时间，因为服务器没有更新
+        final prefs = await SharedPreferences.getInstance();
+        final syncTimeKey = 'last_sync_time_$calendarId';
+        await prefs.setInt(syncTimeKey, currentUpdateTime.millisecondsSinceEpoch);
+        debugPrint('已保存最后检查时间到SharedPreferences: $currentUpdateTime');
+        
         return false;
       }
     } catch (e) {
@@ -223,6 +265,9 @@ class CalendarBookManager with ChangeNotifier {
       
       debugPrint('发现 ${sharedCalendars.length} 个共享日历需要更新时间');
       
+      // 准备用于保存任务完成状态的SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      
       // 为每个共享日历更新最后修改时间
       for (final calendar in sharedCalendars) {
         try {
@@ -239,35 +284,51 @@ class CalendarBookManager with ChangeNotifier {
           
           // 获取当前缓存的最后更新时间
           final currentUpdateTime = _lastUpdateTimeMap[calendarId];
+          debugPrint('本地最后更新时间: $currentUpdateTime');
           
           // 获取服务器最新的更新时间
-          final lastUpdateTime = await _apiService.getCalendarLastUpdateTime(shareCode)
+          final serverUpdateTime = await _apiService.getCalendarLastUpdateTime(shareCode)
               .timeout(const Duration(seconds: 15), onTimeout: () {
             debugPrint('获取日历 $calendarId 的最后修改时间超时');
             return null;
           });
           
-          if (lastUpdateTime != null) {
-            // 检查是否有更新（时间不同或者之前没有记录时间）
-            bool hasUpdate = currentUpdateTime == null || 
-                            lastUpdateTime.isAfter(currentUpdateTime);
-            
-            // 更新缓存的时间
-            _lastUpdateTimeMap[calendarId] = lastUpdateTime;
-            
-            if (hasUpdate) {
-              debugPrint('检测到日历 $calendarId 有更新，最新时间: $lastUpdateTime，之前时间: $currentUpdateTime');
-              
-              // 触发自动拉取日程操作
-              _autoFetchCalendarSchedules(calendarId, shareCode);
-            } else {
-              debugPrint('日历 $calendarId 没有更新，最新时间: $lastUpdateTime');
-            }
-          } else {
+          debugPrint('服务器最后更新时间: $serverUpdateTime');
+          
+          // 如果服务器时间为空，则无法比较，跳过此日历
+          if (serverUpdateTime == null) {
             debugPrint('未能获取日历 $calendarId 的有效最后修改时间');
             failureCount++;
             failedCalendarIds.add(calendarId);
             continue;
+          }
+          
+          // 检查是否有更新（时间不同或者之前没有记录时间）
+          bool hasUpdate = currentUpdateTime == null || 
+                          serverUpdateTime.isAfter(currentUpdateTime);
+          
+          // 更新缓存的时间
+          if (hasUpdate) {
+            // 如果服务器时间较新，则更新为服务器时间
+            _lastUpdateTimeMap[calendarId] = serverUpdateTime;
+            
+            // 保存最后同步时间到SharedPreferences
+            final syncTimeKey = 'last_sync_time_$calendarId';
+            await prefs.setInt(syncTimeKey, serverUpdateTime.millisecondsSinceEpoch);
+            debugPrint('已保存服务器更新时间到SharedPreferences: $serverUpdateTime');
+            
+            debugPrint('检测到服务器有更新，最新时间: $serverUpdateTime，本地时间: $currentUpdateTime');
+            
+            // 触发自动拉取日程操作
+            _autoFetchCalendarSchedules(calendarId, shareCode);
+          } else {
+            debugPrint('服务器没有更新，最新时间: $serverUpdateTime，本地时间: $currentUpdateTime');
+            
+            // 即使没有更新，也保存最后检查时间
+            // 注意：这里我们保存的是本地时间，而不是服务器时间，因为服务器没有更新
+            final syncTimeKey = 'last_sync_time_$calendarId';
+            await prefs.setInt(syncTimeKey, currentUpdateTime.millisecondsSinceEpoch);
+            debugPrint('已保存最后检查时间到SharedPreferences: $currentUpdateTime');
           }
           
           successCount++;
@@ -1160,73 +1221,52 @@ class CalendarBookManager with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       
       // 保存新的日程
-      for (var scheduleData in schedulesData) {
+      int importedCount = 0;
+      for (final scheduleData in schedulesData) {
         try {
-          // 确保日期字段是整数时间戳
-          final startTime = scheduleData['startTime'];
-          final endTime = scheduleData['endTime'];
-          final scheduleId = scheduleData['id'];
-          
-          if (startTime == null || endTime == null || scheduleId == null) {
-            debugPrint('警告: 日程数据不完整，跳过: $scheduleData');
-            continue;
-          }
-          
-          final startDateTime = startTime is int 
-              ? DateTime.fromMillisecondsSinceEpoch(startTime) 
-              : DateTime.parse(startTime.toString());
-              
-          final endDateTime = endTime is int 
-              ? DateTime.fromMillisecondsSinceEpoch(endTime) 
-              : DateTime.parse(endTime.toString());
-          
-          // 获取服务器返回的完成状态
-          final serverCompleted = scheduleData['isCompleted'] == true;
-          
-          // 生成任务键
-          final taskKey = '${startDateTime.year}-${startDateTime.month}-${startDateTime.day}-$scheduleId';
-          
-          // 检查本地是否有此任务的完成状态记录
-          final localCompleted = taskCompletionStatus[taskKey] ?? false;
-          
-          // 决定使用哪个完成状态 - 优先使用服务器的状态
-          final finalCompleted = serverCompleted;
-          
-          final schedule = ScheduleItem(
-            id: scheduleId,
-            calendarId: calendarId,
-            title: scheduleData['title'],
-            description: scheduleData['description'],
-            startTime: startDateTime,
-            endTime: endDateTime,
-            isAllDay: scheduleData['isAllDay'] == 1,
-            location: scheduleData['location'],
-            isCompleted: finalCompleted,
-          );
-          
+          final schedule = await _createScheduleFromApiData(scheduleData, calendarId);
           await _dbHelper.insertSchedule(schedule);
+          importedCount++;
           
-          // 更新SharedPreferences中的任务完成状态
-          if (finalCompleted) {
-            await prefs.setBool('task_$taskKey', true);
-          } else {
-            // 如果任务未完成但存在记录，则删除记录
-            if (prefs.containsKey('task_$taskKey')) {
-              await prefs.remove('task_$taskKey');
+          // 恢复任务完成状态
+          if (taskCompletionStatus.containsKey(schedule.id)) {
+            final isCompleted = taskCompletionStatus[schedule.id] ?? false;
+            if (isCompleted) {
+              // 创建一个新的日程对象，设置完成状态为true
+              final updatedSchedule = ScheduleItem(
+                id: schedule.id,
+                calendarId: schedule.calendarId,
+                title: schedule.title,
+                description: schedule.description,
+                startTime: schedule.startTime,
+                endTime: schedule.endTime,
+                isAllDay: schedule.isAllDay,
+                location: schedule.location,
+                isCompleted: true,
+              );
+              
+              // 更新本地数据库中的完成状态
+              await _dbHelper.updateSchedule(updatedSchedule);
+              
+              // 保存到SharedPreferences
+              await prefs.setBool('task_completed_${schedule.id}', true);
             }
           }
-          
-          debugPrint('成功保存日程: ${schedule.title}, 完成状态: $finalCompleted');
         } catch (e) {
-          debugPrint('保存单个日程时出错: $e');
-          // 继续处理其他日程
+          debugPrint('导入日程时出错: $e');
+          // 继续处理下一个日程
+          continue;
         }
       }
       
-      debugPrint('成功从云端获取最新日程数据');
+      debugPrint('成功导入 $importedCount 个日程');
+      
+      // 注意：不再在这里更新最后同步时间，因为这个操作已经在checkAndFetchCalendarUpdates方法中完成了
+      
+      // 通知监听器更新UI
       notifyListeners();
     } catch (e) {
-      debugPrint('从云端获取最新日程数据失败: $e');
+      debugPrint('从云端获取日历更新时出错: $e');
       rethrow;
     }
   }
@@ -1238,27 +1278,27 @@ class CalendarBookManager with ChangeNotifier {
       final allKeys = prefs.getKeys();
       final Map<String, bool> result = {};
       
-      // 获取此日历下所有日程，用于生成有效的任务键
+      // 获取此日历下所有日程
       final schedules = await _dbHelper.getSchedules(calendarId);
-      final validPrefixes = <String>{};
       
+      // 遍历所有日程，检查其完成状态
       for (final schedule in schedules) {
-        final prefix = '${schedule.startTime.year}-${schedule.startTime.month}-${schedule.startTime.day}-${schedule.id}';
-        validPrefixes.add(prefix);
-      }
-      
-      // 筛选出属于这个日历的任务状态
-      for (final key in allKeys) {
-        if (key.startsWith('task_')) {
-          final taskKey = key.substring(5); // 去掉前缀'task_'
+        // 检查新格式的任务完成状态键
+        final newKey = 'task_completed_${schedule.id}';
+        if (prefs.containsKey(newKey)) {
+          result[schedule.id] = prefs.getBool(newKey) ?? false;
+          continue;
+        }
+        
+        // 检查旧格式的任务完成状态键
+        final oldKey = 'task_${schedule.startTime.year}-${schedule.startTime.month}-${schedule.startTime.day}-${schedule.id}';
+        if (prefs.containsKey(oldKey)) {
+          result[schedule.id] = prefs.getBool(oldKey) ?? false;
           
-          // 检查任务键是否属于此日历
-          for (final prefix in validPrefixes) {
-            if (taskKey == prefix) {
-              result[taskKey] = prefs.getBool(key) ?? false;
-              break;
-            }
-          }
+          // 迁移到新格式
+          await prefs.setBool(newKey, result[schedule.id]!);
+          await prefs.remove(oldKey);
+          debugPrint('已将任务完成状态从旧格式迁移到新格式: $oldKey -> $newKey');
         }
       }
       
@@ -1386,6 +1426,30 @@ class CalendarBookManager with ChangeNotifier {
         debugPrint('加载分享码映射失败: $e');
       }
       
+      // 从SharedPreferences加载所有日历的最后同步时间
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        
+        // 遍历所有日历本
+        for (final book in _books) {
+          if (book.isShared) {
+            final syncTimeKey = 'last_sync_time_${book.id}';
+            if (prefs.containsKey(syncTimeKey)) {
+              final timestamp = prefs.getInt(syncTimeKey);
+              if (timestamp != null) {
+                final syncTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+                _lastUpdateTimeMap[book.id] = syncTime;
+                debugPrint('已加载日历 ${book.id} 的最后同步时间: $syncTime');
+              }
+            }
+          }
+        }
+        
+        debugPrint('已加载所有日历的最后同步时间');
+      } catch (e) {
+        debugPrint('加载日历同步时间失败: $e');
+      }
+      
       // 加载完成后，更新所有共享日历的最后修改时间
       // 使用防御性编程，确保即使更新失败也不会中断初始化
       try {
@@ -1456,5 +1520,40 @@ class CalendarBookManager with ChangeNotifier {
         debugPrint('定时检查日历更新时出错: $error');
       });
     });
+  }
+
+  // 从API数据创建日程对象
+  Future<ScheduleItem> _createScheduleFromApiData(Map<String, dynamic> scheduleData, String calendarId) async {
+    // 确保日期字段是整数时间戳
+    final startTime = scheduleData['startTime'];
+    final endTime = scheduleData['endTime'];
+    final scheduleId = scheduleData['id'];
+    
+    if (startTime == null || endTime == null || scheduleId == null) {
+      throw Exception('日程数据不完整: $scheduleData');
+    }
+    
+    final startDateTime = startTime is int 
+        ? DateTime.fromMillisecondsSinceEpoch(startTime) 
+        : DateTime.parse(startTime.toString());
+        
+    final endDateTime = endTime is int 
+        ? DateTime.fromMillisecondsSinceEpoch(endTime) 
+        : DateTime.parse(endTime.toString());
+    
+    // 获取服务器返回的完成状态
+    final isCompleted = scheduleData['isCompleted'] == 1 || scheduleData['isCompleted'] == true;
+    
+    return ScheduleItem(
+      id: scheduleId,
+      calendarId: calendarId,
+      title: scheduleData['title'],
+      description: scheduleData['description'],
+      startTime: startDateTime,
+      endTime: endDateTime,
+      isAllDay: scheduleData['isAllDay'] == 1 || scheduleData['isAllDay'] == true,
+      location: scheduleData['location'],
+      isCompleted: isCompleted,
+    );
   }
 } 

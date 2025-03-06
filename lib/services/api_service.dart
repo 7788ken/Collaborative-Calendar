@@ -292,8 +292,31 @@ class ApiService {
         return null;
       }
       
-      // 尝试获取最后更新时间
-      // 查找可能的字段名称：lastUpdatedAt, updatedAt, lastModified 等
+      // 优先检查 updatedAt 字段
+      if (calendarInfo.containsKey('updatedAt') && calendarInfo['updatedAt'] != null) {
+        final updatedAt = calendarInfo['updatedAt'];
+        debugPrint('找到 updatedAt 字段: $updatedAt (类型: ${updatedAt.runtimeType})');
+        
+        try {
+          // 如果是字符串格式的日期时间 (如 "2025-03-06 16:04:04")
+          if (updatedAt is String) {
+            // 尝试解析日期时间字符串
+            final result = DateTime.parse(updatedAt.replaceAll(' ', 'T'));
+            debugPrint('成功将 updatedAt 解析为日期时间: $result');
+            return result;
+          } 
+          // 如果是整数时间戳
+          else if (updatedAt is int) {
+            final result = DateTime.fromMillisecondsSinceEpoch(updatedAt);
+            debugPrint('成功将 updatedAt 时间戳解析为日期时间: $result');
+            return result;
+          }
+        } catch (e) {
+          debugPrint('解析 updatedAt 字段失败: $e，将尝试其他字段');
+        }
+      }
+      
+      // 如果 updatedAt 字段不存在或解析失败，尝试其他可能的字段
       final possibleFieldNames = ['lastUpdatedAt', 'updatedAt', 'lastModified', 'modified_at'];
       dynamic timestamp;
       
@@ -326,8 +349,10 @@ class ApiService {
       } else if (timestamp is String) {
         // 字符串时间戳，可能是ISO格式或毫秒数
         try {
+          // 尝试将空格替换为T，以符合ISO 8601格式
+          final formattedTimestamp = timestamp.replaceAll(' ', 'T');
           // 首先尝试作为ISO字符串解析
-          final result = DateTime.parse(timestamp);
+          final result = DateTime.parse(formattedTimestamp);
           debugPrint('成功将字符串解析为ISO日期时间: $result');
           return result;
         } catch (parseError) {
