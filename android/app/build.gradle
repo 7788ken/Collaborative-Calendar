@@ -1,12 +1,29 @@
 android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.example.flutter_jtrl"
+        applicationId "mo.yhtech.ddcalendar"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
-        minSdkVersion 19   // 确保这个值至少是 19
+        minSdkVersion 21   // 确保与图标配置一致
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("upload-keystore.jks")
+            storePassword "qwer1234"  // 直接设置密码，而不是从环境变量获取
+            keyAlias "upload"
+            keyPassword "qwer1234"    // 直接设置密码，而不是从环境变量获取
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
     }
 } 

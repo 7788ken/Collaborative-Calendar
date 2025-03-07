@@ -93,22 +93,46 @@ class ScheduleItemWidget extends StatelessWidget {
                     ),
                     if (item.location != null && item.location!.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(
-                        '📍 ${item.location}',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[600],
-                          decoration: isCompleted ? TextDecoration.lineThrough : null,
-                        ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: const Color.fromARGB(255, 184, 61, 61),
+                          ),
+                          SizedBox(
+                            width: 4,
+                          ),
+                          Text(
+                            item.location!,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                              decoration: isCompleted ? TextDecoration.lineThrough : null,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                     if (item.description != null && item.description!.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(
-                        item.description!,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                          decoration: isCompleted ? TextDecoration.lineThrough : null,
-                        ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.my_library_books_rounded,
+                            size: 16,
+                            color: Colors.grey[600],
+                          ),
+                          SizedBox(
+                            width: 4,
+                          ),
+                          Text(
+                            item.description!,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[600],
+                              decoration: isCompleted ? TextDecoration.lineThrough : null,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],

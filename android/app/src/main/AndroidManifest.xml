@@ -14,7 +14,7 @@
         </intent>
     </queries>
     <application
-        android:label="flutter_jtrl"
+        android:label="DD-Calendar"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

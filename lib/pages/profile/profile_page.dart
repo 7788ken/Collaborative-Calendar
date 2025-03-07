@@ -60,7 +60,7 @@ class ProfilePage extends StatelessWidget {
                 const SizedBox(height: 16),
                 // 昵称
                 const Text(
-                  '用户昵称',
+                  '日历用户',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -86,23 +86,23 @@ class ProfilePage extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _buildListItem(
-                  title: '编辑资料',
-                  leadingIcon: Icons.edit,
-                  onTap: () {
-                    // TODO: 实现编辑资料功能
-                  },
-                ),
-                _buildListItem(
-                  title: '我的日历 ID',
-                  leadingIcon: Icons.calendar_today,
-                  trailing: const Text(
-                    'JTRL123456',
-                    style: TextStyle(
-                      color: Colors.grey,
-                    ),
-                  ),
-                ),
+                // _buildListItem(
+                //   title: '编辑资料',
+                //   leadingIcon: Icons.edit,
+                //   onTap: () {
+                //     // TODO: 实现编辑资料功能
+                //   },
+                // ),
+                // _buildListItem(
+                //   title: '我的日历 ID',
+                //   leadingIcon: Icons.calendar_today,
+                //   trailing: const Text(
+                //     'JTRL123456',
+                //     style: TextStyle(
+                //       color: Colors.grey,
+                //     ),
+                //   ),
+                // ),
                 _buildListItem(
                   title: '关于',
                   leadingIcon: Icons.info_outline,

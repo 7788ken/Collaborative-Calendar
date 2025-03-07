@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- 背景 -->
+    <rect width="1024" height="1024" fill="#A5D6A7"/>
+    
+    <!-- 日历图标 -->
+    <g transform="translate(262, 262) scale(0.5)">
+        <!-- 日历主体 -->
+        <rect x="0" y="100" width="1000" height="800" rx="40" fill="white"/>
+        
+        <!-- 日历顶部 -->
+        <rect x="0" y="0" width="1000" height="200" rx="40" fill="#FF5252"/>
+        
+        <!-- 装饰圆圈 -->
+        <circle cx="500" cy="500" r="300" fill="none" stroke="white" stroke-width="40"/>
+        
+        <!-- 爱心装饰 -->
+        <path d="M500 700 L700 500 Q800 400 700 300 T500 300 L300 500 Q200 600 300 700 T500 700Z" fill="#FF5252"/>
+    </g>
+    
+    <!-- 应用名称 -->
+    <text x="512" y="800" font-family="Arial" font-size="80" fill="white" text-anchor="middle" font-weight="bold">DD-Calendar</text>
+</svg> 

@@ -269,23 +269,23 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 16),
                 
                 // 清空所有日程按钮
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red[50],
-                    foregroundColor: Colors.red,
-                    minimumSize: const Size.fromHeight(48), // 设置按钮最小高度
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: () => _showClearConfirmDialog(context),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.delete_forever),
-                      SizedBox(width: 8),
-                      Text('清空所有日程'),
-                    ],
-                  ),
-                ),
+                // ElevatedButton(
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.red[50],
+                //     foregroundColor: Colors.red,
+                //     minimumSize: const Size.fromHeight(48), // 设置按钮最小高度
+                //     padding: const EdgeInsets.symmetric(vertical: 12),
+                //   ),
+                //   onPressed: () => _showClearConfirmDialog(context),
+                //   child: Row(
+                //     mainAxisAlignment: MainAxisAlignment.center,
+                //     children: const [
+                //       Icon(Icons.delete_forever),
+                //       SizedBox(width: 8),
+                //       Text('清空所有日程'),
+                //     ],
+                //   ),
+                // ),
               ],
             ),
           ),

@@ -10,6 +10,7 @@ import '../../widgets/add_schedule_page.dart';
 import '../../pages/schedule/schedule_page.dart';
 import 'widgets/task_item.dart';
 import '../../services/task_completion_service.dart';
+import 'package:sticky_headers/sticky_headers.dart';
 
 class TaskPage extends StatefulWidget {
   const TaskPage({super.key});
@@ -775,114 +776,133 @@ class _TaskPageState extends State<TaskPage> {
                   )
                 : RefreshIndicator(
                     onRefresh: _loadTasks,
-                    child: ListView.builder(
-                      controller: _scrollController, // 添加ScrollController
-                      padding: const EdgeInsets.all(16),
-                      itemCount: groupedSchedules.length,
-                      itemBuilder: (context, index) {
-                        final date = groupedSchedules.keys.elementAt(index);
-                        final schedules = groupedSchedules[date]!;
-                        
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // 日期标题
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _isToday(date) 
-                                          ? Theme.of(context).colorScheme.primary
-                                          : _isPast(date) 
-                                              ? Colors.grey
-                                              : Theme.of(context).colorScheme.primary,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Text(
-                                      '${date.month}月${date.day}日',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
+                    child: CustomScrollView(
+                      controller: _scrollController,
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.all(16),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                if (index >= groupedSchedules.length) return null;
+                                
+                                final date = groupedSchedules.keys.elementAt(index);
+                                final schedules = groupedSchedules[date]!;
+                                
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // 日期标题
+                                    StickyHeaderBuilder(
+                                      controller: _scrollController,
+                                      builder: (BuildContext context, double stuckAmount) {
+                                        return Container(
+                                          color: Colors.white,
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 6,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: _isToday(date) 
+                                                      ? Theme.of(context).colorScheme.primary
+                                                      : _isPast(date) 
+                                                          ? Colors.grey
+                                                          : Theme.of(context).colorScheme.primary,
+                                                  borderRadius: BorderRadius.circular(16),
+                                                ),
+                                                child: Text(
+                                                  '${date.month}月${date.day}日',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                _getWeekday(date.weekday),
+                                                style: TextStyle(
+                                                  color: Colors.grey[600],
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              if (_isToday(date))
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.green[100],
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: const Text(
+                                                    '今天',
+                                                    style: TextStyle(
+                                                      color: Colors.green,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              if (_isPast(date) && !_isToday(date))
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey[100],
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: const Text(
+                                                    '已过期',
+                                                    style: TextStyle(
+                                                      color: Colors.grey,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                      content: Column(
+                                        children: [
+                                          ...schedules.map((item) => TaskItemWidget(
+                                            item: item,
+                                            onToggleComplete: () => _toggleComplete(item),
+                                            onDelete: () => _deleteSchedule(item),
+                                            onEdit: (scheduleItem) => _editSchedule(scheduleItem),
+                                            originalId: _findOriginalScheduleItem(item)?.id ?? '',
+                                            isUnsynced: !item.isSynced,
+                                            onSyncStatusChanged: () {
+                                              // 重新加载任务列表
+                                              setState(() {
+                                                _loadTasks();
+                                              });
+                                            },
+                                          )).toList(),
+                                          // 分隔线
+                                          if (index < groupedSchedules.length - 1)
+                                            const Divider(height: 32),
+                                        ],
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _getWeekday(date.weekday),
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  if (_isToday(date))
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.green[100],
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Text(
-                                        '今天',
-                                        style: TextStyle(
-                                          color: Colors.green,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  if (_isPast(date) && !_isToday(date))
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[100],
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Text(
-                                        '已过期',
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            // 日程列表
-                            ...schedules.map((item) => TaskItemWidget(
-                              item: item,
-                              onToggleComplete: () => _toggleComplete(item),
-                              onDelete: () => _deleteSchedule(item),
-                              onEdit: (scheduleItem) => _editSchedule(scheduleItem),
-                              originalId: _findOriginalScheduleItem(item)?.id ?? '',
-                              isUnsynced: !item.isSynced,
-                              onSyncStatusChanged: () {
-                                // 重新加载任务列表
-                                setState(() {
-                                  _loadTasks();
-                                });
+                                  ],
+                                );
                               },
-                            )).toList(),
-                            // 分隔线
-                            if (index < groupedSchedules.length - 1)
-                              const Divider(height: 32),
-                          ],
-                        );
-                      },
+                              childCount: groupedSchedules.length,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
             ),
