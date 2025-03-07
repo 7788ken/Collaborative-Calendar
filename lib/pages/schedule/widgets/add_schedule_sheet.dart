@@ -3,6 +3,7 @@ import '../../../models/schedule_item.dart';
 import '../../../data/schedule_service.dart';
 import '../../../data/calendar_book_manager.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 class AddScheduleSheet extends StatefulWidget {
   final DateTime selectedDate;
@@ -234,6 +235,7 @@ class _AddScheduleSheetState extends State<AddScheduleSheet> {
       
       // 创建日程对象
       final schedule = ScheduleItem(
+        id: const Uuid().v4(),
         calendarId: widget.calendarId,
         title: _titleController.text,
         description: _descriptionController.text.isEmpty ? null : _descriptionController.text,
@@ -241,6 +243,7 @@ class _AddScheduleSheetState extends State<AddScheduleSheet> {
         startTime: startDateTime,
         endTime: endDateTime,
         isAllDay: _isAllDay,
+        isSynced: false,
       );
       
       // 保存到数据库

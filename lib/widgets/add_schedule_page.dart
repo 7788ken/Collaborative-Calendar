@@ -182,6 +182,9 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
   // 创建新日程
   Future<bool> _createNewSchedule(CalendarBookManager calendarManager) async {
     try {
+      // 检查日历本是否为共享日历
+      final isSharedCalendar = calendarManager.activeBook?.isShared ?? false;
+      
       // 创建新日程项
       final newSchedule = ScheduleItem(
         id: Uuid().v4(),
@@ -210,12 +213,15 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
             _locationController.text.isEmpty
                 ? null
                 : _locationController.text.trim(),
+        isSynced: !isSharedCalendar, // 如果是共享日历，初始状态为未同步
       );
 
       // 添加调试输出
       print('准备创建新日程: ${newSchedule.title}');
       print('日程ID: ${newSchedule.id}');
       print('日程所属日历本ID: ${newSchedule.calendarId}');
+      print('是否为共享日历: $isSharedCalendar');
+      print('初始同步状态: ${newSchedule.isSynced}');
       print('日程详细信息: ${newSchedule.toMap()}');
 
       // 保存到数据库

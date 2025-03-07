@@ -266,6 +266,7 @@ class _TaskPageState extends State<TaskPage> {
       remark: item.description ?? '',
       date: DateTime(item.startTime.year, item.startTime.month, item.startTime.day),
       isCompleted: isCompleted, // 使用已保存的完成状态
+      isSynced: item.isSynced, // 添加同步状态
     );
   }
 
@@ -867,8 +868,14 @@ class _TaskPageState extends State<TaskPage> {
                               onToggleComplete: () => _toggleComplete(item),
                               onDelete: () => _deleteSchedule(item),
                               onEdit: (scheduleItem) => _editSchedule(scheduleItem),
-                              // 查找并传递原始ID
                               originalId: _findOriginalScheduleItem(item)?.id ?? '',
+                              isUnsynced: !item.isSynced,
+                              onSyncStatusChanged: () {
+                                // 重新加载任务列表
+                                setState(() {
+                                  _loadTasks();
+                                });
+                              },
                             )).toList(),
                             // 分隔线
                             if (index < groupedSchedules.length - 1)

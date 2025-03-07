@@ -4,6 +4,7 @@ import '../../../data/models/schedule_item.dart';
 import '../../../widgets/add_schedule_page.dart';
 import '../../../models/schedule_item.dart' as calendar_models;
 import '../../../data/calendar_book_manager.dart';
+import '../../../data/schedule_service.dart';
 
 class TaskItemWidget extends StatefulWidget {
   final ScheduleItem item;
@@ -11,6 +12,8 @@ class TaskItemWidget extends StatefulWidget {
   final VoidCallback onDelete;
   final Function(calendar_models.ScheduleItem) onEdit;
   final String originalId;
+  final bool isUnsynced;
+  final VoidCallback onSyncStatusChanged;
 
   const TaskItemWidget({
     super.key,
@@ -19,6 +22,8 @@ class TaskItemWidget extends StatefulWidget {
     required this.onDelete,
     required this.onEdit,
     required this.originalId,
+    required this.onSyncStatusChanged,
+    this.isUnsynced = false,
   });
 
   @override
@@ -213,147 +218,228 @@ class _TaskItemWidgetState extends State<TaskItemWidget> with SingleTickerProvid
                         ),
                       ],
                     ),
-                    child: Padding(
-                      // 添加左边距为时间指示器宽度，避免重叠
-                      padding: EdgeInsets.only(left: timeIndicatorWidth),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: widget.item.isCompleted ? Colors.grey.shade100 : Colors.white,
-                          borderRadius: const BorderRadius.horizontal(
-                            right: Radius.circular(12),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            // 内容区域
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  if (_isOpen) {
-                                    _toggleSlide();
-                                  } else {
-                                    widget.onToggleComplete();
-                                  }
-                                },
-                                onHorizontalDragEnd: (details) {
-                                  // 检测滑动结束时的速度
-                                  if (details.primaryVelocity != null) {
-                                    if (details.primaryVelocity! < -200) {
-                                      // 快速向左滑动 - 打开
-                                      if (!_isOpen) _toggleSlide();
-                                    } else if (details.primaryVelocity! > 200) {
-                                      // 快速向右滑动 - 关闭
-                                      if (_isOpen) _toggleSlide();
-                                    } else {
-                                      // 速度不够，根据位置决定是否吸附
-                                      _handleSlideEnd();
-                                    }
-                                  } else {
-                                    // 没有速度信息，根据位置决定是否吸附
-                                    _handleSlideEnd();
-                                  }
-                                },
-                                onHorizontalDragUpdate: (details) {
-                                  // 计算滑动进度，基于滑动距离
-                                  final delta = details.primaryDelta;
-                                  if (delta == null) return;
-                                  
-                                  // 向左滑动（负值）处理
-                                  if (delta < 0 && !_isOpen) {
-                                    final newValue = _controller.value - (delta.abs() / actionsWidth);
-                                    _controller.value = newValue.clamp(0.0, 1.0);
-                                  } 
-                                  // 向右滑动（正值）处理
-                                  else if (delta > 0 && _isOpen) {
-                                    final newValue = _controller.value - (delta / actionsWidth);
-                                    _controller.value = newValue.clamp(0.0, 1.0);
-                                  }
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: widget.item.isCompleted ? Colors.grey.shade100 : Colors.white,
-                                    borderRadius: const BorderRadius.horizontal(
-                                      right: Radius.circular(12),
+                    child: Stack(
+                      children: [
+                        Padding(
+                          // 添加左边距为时间指示器宽度，避免重叠
+                          padding: EdgeInsets.only(left: timeIndicatorWidth),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: widget.item.isCompleted ? Colors.grey.shade100 : Colors.white,
+                              borderRadius: const BorderRadius.horizontal(
+                                right: Radius.circular(12),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                // 内容区域
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      if (_isOpen) {
+                                        _toggleSlide();
+                                      } else {
+                                        widget.onToggleComplete();
+                                      }
+                                    },
+                                    onHorizontalDragEnd: (details) {
+                                      // 检测滑动结束时的速度
+                                      if (details.primaryVelocity != null) {
+                                        if (details.primaryVelocity! < -200) {
+                                          // 快速向左滑动 - 打开
+                                          if (!_isOpen) _toggleSlide();
+                                        } else if (details.primaryVelocity! > 200) {
+                                          // 快速向右滑动 - 关闭
+                                          if (_isOpen) _toggleSlide();
+                                        } else {
+                                          // 速度不够，根据位置决定是否吸附
+                                          _handleSlideEnd();
+                                        }
+                                      } else {
+                                        // 没有速度信息，根据位置决定是否吸附
+                                        _handleSlideEnd();
+                                      }
+                                    },
+                                    onHorizontalDragUpdate: (details) {
+                                      // 计算滑动进度，基于滑动距离
+                                      final delta = details.primaryDelta;
+                                      if (delta == null) return;
+                                      
+                                      // 向左滑动（负值）处理
+                                      if (delta < 0 && !_isOpen) {
+                                        final newValue = _controller.value - (delta.abs() / actionsWidth);
+                                        _controller.value = newValue.clamp(0.0, 1.0);
+                                      } 
+                                      // 向右滑动（正值）处理
+                                      else if (delta > 0 && _isOpen) {
+                                        final newValue = _controller.value - (delta / actionsWidth);
+                                        _controller.value = newValue.clamp(0.0, 1.0);
+                                      }
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: widget.item.isCompleted ? Colors.grey.shade100 : Colors.white,
+                                        borderRadius: const BorderRadius.horizontal(
+                                          right: Radius.circular(12),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(12),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  // 删除空白容器
+                                                  Text(
+                                                    widget.item.title,
+                                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                                      decoration: widget.item.isCompleted ? TextDecoration.lineThrough : null,
+                                                      color: widget.item.isCompleted ? Colors.grey : Colors.black87,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                  // 未完成状态显示详细信息
+                                                  if (!widget.item.isCompleted) ...[
+                                                    if (widget.item.location.isNotEmpty) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        '📍 ${widget.item.location}',
+                                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                          color: Colors.grey[600],
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ],
+                                                    if (widget.item.remark.isNotEmpty) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        widget.item.remark,
+                                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                          color: Colors.grey[600],
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          
+                                          // 完成状态切换按钮
+                                          AnimatedContainer(
+                                            duration: const Duration(milliseconds: 300),
+                                            child: IconButton(
+                                              icon: widget.item.isCompleted 
+                                                  ? const Icon(
+                                                      Icons.refresh_rounded,
+                                                      color: Colors.grey,
+                                                    )
+                                                  : Icon(
+                                                      Icons.check_circle_outline,
+                                                      color: Colors.grey[400],
+                                                    ),
+                                              onPressed: () {
+                                                // 添加振动反馈
+                                                HapticFeedback.lightImpact();
+                                                widget.onToggleComplete();
+                                              },
+                                              tooltip: widget.item.isCompleted ? '标记为未完成' : '标记为已完成',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(12),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              // 删除空白容器
-                                              Text(
-                                                widget.item.title,
-                                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                                  decoration: widget.item.isCompleted ? TextDecoration.lineThrough : null,
-                                                  color: widget.item.isCompleted ? Colors.grey : Colors.black87,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              // 未完成状态显示详细信息
-                                              if (!widget.item.isCompleted) ...[
-                                                if (widget.item.location.isNotEmpty) ...[
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    '📍 ${widget.item.location}',
-                                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                                      color: Colors.grey[600],
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                                if (widget.item.remark.isNotEmpty) ...[
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    widget.item.remark,
-                                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                                      color: Colors.grey[600],
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                              ],
-                                            ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        
+                        // 添加未同步状态角标
+                        if (widget.isUnsynced)
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () async {
+                                // 获取 ScheduleService 实例
+                                final scheduleService = ScheduleService();
+                                
+                                // 显示同步中的加载指示器
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                           ),
                                         ),
+                                        SizedBox(width: 12),
+                                        Text('正在同步...'),
+                                      ],
+                                    ),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                                
+                                // 尝试同步
+                                final success = await scheduleService.syncSchedule(widget.originalId);
+                                
+                                if (context.mounted) {
+                                  if (success) {
+                                    // 同步成功
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('同步成功'),
+                                        backgroundColor: Colors.green,
                                       ),
-                                      
-                                      // 完成状态切换按钮
-                                      AnimatedContainer(
-                                        duration: const Duration(milliseconds: 300),
-                                        child: IconButton(
-                                          icon: widget.item.isCompleted 
-                                              ? const Icon(
-                                                  Icons.refresh_rounded,
-                                                  color: Colors.grey,
-                                                )
-                                              : Icon(
-                                                  Icons.check_circle_outline,
-                                                  color: Colors.grey[400],
-                                                ),
-                                          onPressed: () {
-                                            // 添加振动反馈
-                                            HapticFeedback.lightImpact();
-                                            widget.onToggleComplete();
-                                          },
-                                          tooltip: widget.item.isCompleted ? '标记为未完成' : '标记为已完成',
-                                        ),
+                                    );
+                                    // 调用刷新回调
+                                    widget.onSyncStatusChanged();
+                                  } else {
+                                    // 同步失败
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('同步失败，请检查网络连接'),
+                                        backgroundColor: Colors.red,
                                       ),
-                                    ],
+                                    );
+                                  }
+                                }
+                              },
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.error,
+                                  borderRadius: const BorderRadius.only(
+                                    topRight: Radius.circular(12),
+                                    bottomLeft: Radius.circular(12),
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.sync_problem,
+                                    size: 16,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
+                          ),
+                      ],
                     ),
                   ),
                 ),

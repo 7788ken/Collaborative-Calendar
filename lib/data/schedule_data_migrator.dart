@@ -5,6 +5,7 @@ import '../models/schedule_item.dart';
 import 'schedule_service.dart';
 import 'database/database_helper.dart';
 import 'calendar_book_manager.dart';
+import 'package:uuid/uuid.dart';
 
 // 数据迁移工具，用于将测试数据迁移到数据库
 class ScheduleDataMigrator {
@@ -65,17 +66,25 @@ class ScheduleDataMigrator {
         
         // 创建新的ScheduleItem对象
         final newSchedule = ScheduleItem(
+          id: const Uuid().v4(),
           calendarId: defaultCalendarId,
-          title: oldItem.title,
+          title: oldItem.title.isNotEmpty ? oldItem.title : '未命名日程',
           description: oldItem.remark,
           startTime: DateTime(date.year, date.month, date.day, startHour, startMinute),
           endTime: DateTime(date.year, date.month, date.day, endHour, endMinute),
           isAllDay: false,
           location: oldItem.location,
+          isSynced: false, // 新迁移的数据标记为未同步
         );
         
-        // 保存到数据库
-        await _scheduleService.addSchedule(newSchedule);
+        try {
+          // 保存到数据库
+          await _scheduleService.addSchedule(newSchedule);
+          print('成功迁移日程: ${newSchedule.title}');
+        } catch (e) {
+          print('迁移日程时出错: ${newSchedule.title}, 错误: $e');
+          continue; // 继续处理下一条数据
+        }
       }
       
       print('测试数据迁移完成');

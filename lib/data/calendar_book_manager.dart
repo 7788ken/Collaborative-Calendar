@@ -640,6 +640,7 @@ class CalendarBookManager with ChangeNotifier {
       int count = 0;
       for (var schedule in schedules) {
         final newSchedule = ScheduleItem(
+          id: const Uuid().v4(),  // 为新日程生成新的唯一ID
           calendarId: newId,
           title: schedule.title,
           description: schedule.description,

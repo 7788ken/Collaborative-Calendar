@@ -15,7 +15,7 @@ class ScheduleItem {
   final bool isSynced; // 添加同步状态字段
 
   ScheduleItem({
-    String? id,
+    required this.id,
     required this.calendarId,
     required this.title,
     this.description,
@@ -24,26 +24,35 @@ class ScheduleItem {
     this.isAllDay = false,
     this.location,
     DateTime? createdAt,
-    this.isCompleted = false, // 默认为未完成
-    this.isSynced = true, // 默认为已同步
-  }) : 
-    id = id ?? const Uuid().v4(),
-    createdAt = createdAt ?? DateTime.now();
+    this.isCompleted = false,
+    this.isSynced = true,
+  }) : createdAt = createdAt ?? DateTime.now();
   
   // 从Map创建ScheduleItem对象（用于从数据库读取）
   factory ScheduleItem.fromMap(Map<String, dynamic> map) {
+    // 确保必需的字符串字段不为空
+    if (map['id'] == null || (map['id'] as String).isEmpty) {
+      throw Exception('ID不能为空');
+    }
+    if (map['calendar_id'] == null || (map['calendar_id'] as String).isEmpty) {
+      throw Exception('日历ID不能为空');
+    }
+    if (map['title'] == null || (map['title'] as String).isEmpty) {
+      throw Exception('标题不能为空');
+    }
+
     return ScheduleItem(
-      id: map['id'],
-      calendarId: map['calendar_id'],
-      title: map['title'],
-      description: map['description'],
-      startTime: DateTime.fromMillisecondsSinceEpoch(map['start_time']),
-      endTime: DateTime.fromMillisecondsSinceEpoch(map['end_time']),
+      id: map['id'] as String,
+      calendarId: map['calendar_id'] as String,
+      title: map['title'] as String,
+      description: map['description'] as String?,
+      startTime: DateTime.fromMillisecondsSinceEpoch(map['start_time'] as int),
+      endTime: DateTime.fromMillisecondsSinceEpoch(map['end_time'] as int),
       isAllDay: map['is_all_day'] == 1,
-      location: map['location'],
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at']),
-      isCompleted: map['is_completed'] == 1, // 从数据库读取完成状态
-      isSynced: map['sync_status'] == 1, // 从数据库读取同步状态
+      location: map['location'] as String?,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+      isCompleted: map['is_completed'] == 1,
+      isSynced: map['sync_status'] == 1,
     );
   }
 
@@ -59,13 +68,14 @@ class ScheduleItem {
       'is_all_day': isAllDay ? 1 : 0,
       'location': location,
       'created_at': createdAt.millisecondsSinceEpoch,
-      'is_completed': isCompleted ? 1 : 0, // 存储完成状态
-      'sync_status': isSynced ? 1 : 0, // 存储同步状态
+      'is_completed': isCompleted ? 1 : 0,
+      'sync_status': isSynced ? 1 : 0,
     };
   }
 
-  // 创建一个具有相同ID和属性的副本，但可以更改部分属性
+  // 创建一个具有相同属性的副本，但可以更改部分属性
   ScheduleItem copyWith({
+    String? id,
     String? calendarId,
     String? title,
     String? description,
@@ -73,11 +83,12 @@ class ScheduleItem {
     DateTime? endTime,
     bool? isAllDay,
     String? location,
-    bool? isCompleted, // 添加完成状态字段
-    bool? isSynced, // 添加同步状态字段
+    DateTime? createdAt,
+    bool? isCompleted,
+    bool? isSynced,
   }) {
     return ScheduleItem(
-      id: this.id,
+      id: id ?? this.id,
       calendarId: calendarId ?? this.calendarId,
       title: title ?? this.title,
       description: description ?? this.description,
@@ -85,9 +96,9 @@ class ScheduleItem {
       endTime: endTime ?? this.endTime,
       isAllDay: isAllDay ?? this.isAllDay,
       location: location ?? this.location,
-      createdAt: this.createdAt,
-      isCompleted: isCompleted ?? this.isCompleted, // 保留完成状态
-      isSynced: isSynced ?? this.isSynced, // 保留同步状态
+      createdAt: createdAt ?? this.createdAt,
+      isCompleted: isCompleted ?? this.isCompleted,
+      isSynced: isSynced ?? this.isSynced,
     );
   }
 

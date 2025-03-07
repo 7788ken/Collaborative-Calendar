@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/schedule_item.dart' as calendar_models;
+import 'package:uuid/uuid.dart';
 
 class ScheduleItem {
   final String title;
@@ -9,6 +10,7 @@ class ScheduleItem {
   final String remark;
   final DateTime date;
   bool isCompleted;
+  final bool isSynced;
 
   ScheduleItem({
     required this.title,
@@ -18,6 +20,7 @@ class ScheduleItem {
     required this.remark,
     required this.date,
     this.isCompleted = false,
+    this.isSynced = true,
   });
   
   // 将任务项转换为日历日程项
@@ -26,8 +29,9 @@ class ScheduleItem {
     String? id,
   }) {
     print('将任务项转换为日历日程项，使用指定的日历本ID: $calendarId');
+    final scheduleId = id ?? const Uuid().v4(); // 如果 id 为空，生成新的 UUID
     return calendar_models.ScheduleItem(
-      id: id,
+      id: scheduleId,
       calendarId: calendarId,
       title: title,
       description: remark,
@@ -46,6 +50,7 @@ class ScheduleItem {
         int.tryParse(endTime.split(':')[1]) ?? 0,
       ),
       location: location,
+      isSynced: isSynced,
     );
   }
 
@@ -59,6 +64,7 @@ class ScheduleItem {
       remark: remark,
       date: date,
       isCompleted: !isCompleted,
+      isSynced: isSynced,
     );
   }
 } 
