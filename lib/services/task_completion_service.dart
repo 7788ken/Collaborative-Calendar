@@ -172,14 +172,17 @@ class TaskCompletionService {
             throw Exception('无法获取分享码');
           }
           
-          // 先更新本地数据库
-          final updatedSchedule = schedule.copyWith(isCompleted: newStatus);
+          // 先更新本地数据库，标记为未同步
+          final updatedSchedule = schedule.copyWith(
+            isCompleted: newStatus,
+            isSynced: false // 标记为未同步
+          );
           final scheduleService = ScheduleService();
           
           try {
             debugPrint('任务完成状态服务：更新本地数据库...');
             await scheduleService.updateSchedule(updatedSchedule);
-            debugPrint('任务完成状态服务：本地数据库更新成功');
+            debugPrint('任务完成状态服务：本地数据库更新成功，状态：未同步');
             
             // 同步到云端
             debugPrint('任务完成状态服务：开始同步到云端...');
@@ -192,31 +195,39 @@ class TaskCompletionService {
             if (success) {
               debugPrint('任务完成状态服务：云端同步成功');
               
+              // 更新本地同步状态为已同步
+              final syncedSchedule = updatedSchedule.copyWith(isSynced: true);
+              await scheduleService.updateSchedule(syncedSchedule);
+              debugPrint('任务完成状态服务：已更新本地同步状态为已同步');
+              
               // 重新获取最新的日程数据
               debugPrint('任务完成状态服务：准备获取最新的日程数据...');
               await calendarManager.fetchSharedCalendarUpdates(schedule.calendarId);
               debugPrint('任务完成状态服务：已获取最新的日程数据');
             } else {
-              debugPrint('任务完成状态服务：云端同步失败，尝试回滚本地状态');
-              // 回滚本地状态
-              try {
-                final originalSchedule = schedule.copyWith(isCompleted: !newStatus);
-                await scheduleService.updateSchedule(originalSchedule);
-                debugPrint('任务完成状态服务：本地状态已回滚');
-              } catch (e) {
-                debugPrint('任务完成状态服务：回滚本地状态时出错: $e');
+              debugPrint('任务完成状态服务：云端同步失败，保持未同步状态');
+              // 不回滚本地状态，保持未同步标记
+              if (state.mounted) {
+                try {
+                  ScaffoldMessenger.of(state.context).showSnackBar(
+                    const SnackBar(content: Text('网络同步失败，将在网络恢复后自动同步'))
+                  );
+                } catch (e) {
+                  debugPrint('任务完成状态服务：显示提示时出错：$e');
+                }
               }
             }
           } catch (e) {
             debugPrint('任务完成状态服务：更新本地数据库或同步到云端时出错: $e');
-            // 尝试回滚内存中的状态
-            try {
-              final scheduleData = Provider.of<ScheduleData>(state.context, listen: false);
-              final taskKey = '${schedule.startTime.year}-${schedule.startTime.month}-${schedule.startTime.day}-${schedule.id}';
-              await scheduleData.updateTaskCompletionStatus(taskKey, !newStatus);
-              debugPrint('任务完成状态服务：内存状态已回滚');
-            } catch (e) {
-              debugPrint('任务完成状态服务：回滚内存状态时出错: $e');
+            // 保持未同步状态，不回滚
+            if (state.mounted) {
+              try {
+                ScaffoldMessenger.of(state.context).showSnackBar(
+                  const SnackBar(content: Text('网络同步失败，将在网络恢复后自动同步'))
+                );
+              } catch (e) {
+                debugPrint('任务完成状态服务：显示提示时出错：$e');
+              }
             }
           }
         } else {
@@ -226,14 +237,15 @@ class TaskCompletionService {
         }
       } catch (e) {
         debugPrint('任务完成状态服务：查找日历本或同步过程中出错: $e');
-        // 尝试回滚内存中的状态
-        try {
-          final scheduleData = Provider.of<ScheduleData>(state.context, listen: false);
-          final taskKey = '${schedule.startTime.year}-${schedule.startTime.month}-${schedule.startTime.day}-${schedule.id}';
-          await scheduleData.updateTaskCompletionStatus(taskKey, !newStatus);
-          debugPrint('任务完成状态服务：内存状态已回滚');
-        } catch (e) {
-          debugPrint('任务完成状态服务：回滚内存状态时出错: $e');
+        // 保持未同步状态，不回滚
+        if (state.mounted) {
+          try {
+            ScaffoldMessenger.of(state.context).showSnackBar(
+              const SnackBar(content: Text('操作已保存，但同步失败，将在网络恢复后自动同步'))
+            );
+          } catch (e) {
+            debugPrint('任务完成状态服务：显示提示时出错：$e');
+          }
         }
       }
     } catch (e) {
@@ -245,7 +257,10 @@ class TaskCompletionService {
   static Future<void> _updateScheduleCompletionInDatabase(ScheduleItem schedule, bool isCompleted) async {
     try {
       // 创建包含新完成状态的日程对象
-      final updatedSchedule = schedule.copyWith(isCompleted: isCompleted);
+      final updatedSchedule = schedule.copyWith(
+        isCompleted: isCompleted,
+        isSynced: true // 非共享日历默认为已同步
+      );
       
       // 使用ScheduleService更新数据库
       final scheduleService = ScheduleService();

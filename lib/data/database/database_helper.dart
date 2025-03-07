@@ -61,6 +61,7 @@ class DatabaseHelper {
         location TEXT,
         created_at INTEGER NOT NULL,
         is_completed INTEGER DEFAULT 0,
+        sync_status INTEGER DEFAULT 1,
         FOREIGN KEY (calendar_id) REFERENCES calendars (id) ON DELETE CASCADE
       )
     ''');
@@ -450,6 +451,26 @@ class DatabaseHelper {
       print('数据库助手: 同步状态更新成功，更新了 $updateCount 条记录');
     } catch (e) {
       print('数据库助手: 更新日程同步状态时出错: $e');
+    }
+  }
+  
+  // 获取未同步的日程
+  Future<List<ScheduleItem>> getUnsyncedSchedules(String calendarId) async {
+    try {
+      debugPrint('数据库助手: 开始获取未同步的日程');
+      final db = await database;
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'schedules',
+        where: 'calendar_id = ? AND sync_status = 0',
+        whereArgs: [calendarId],
+      );
+      
+      debugPrint('数据库助手: 找到 ${maps.length} 条未同步的日程');
+      return List.generate(maps.length, (i) => ScheduleItem.fromMap(maps[i]));
+    } catch (e) {
+      debugPrint('数据库助手: 获取未同步的日程时出错: $e');
+      return [];
     }
   }
   

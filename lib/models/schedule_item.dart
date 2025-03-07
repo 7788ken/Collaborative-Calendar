@@ -12,6 +12,7 @@ class ScheduleItem {
   final String? location;
   final DateTime createdAt;
   final bool isCompleted; // 添加任务完成状态字段
+  final bool isSynced; // 添加同步状态字段
 
   ScheduleItem({
     String? id,
@@ -24,6 +25,7 @@ class ScheduleItem {
     this.location,
     DateTime? createdAt,
     this.isCompleted = false, // 默认为未完成
+    this.isSynced = true, // 默认为已同步
   }) : 
     id = id ?? const Uuid().v4(),
     createdAt = createdAt ?? DateTime.now();
@@ -41,6 +43,7 @@ class ScheduleItem {
       location: map['location'],
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at']),
       isCompleted: map['is_completed'] == 1, // 从数据库读取完成状态
+      isSynced: map['sync_status'] == 1, // 从数据库读取同步状态
     );
   }
 
@@ -57,6 +60,7 @@ class ScheduleItem {
       'location': location,
       'created_at': createdAt.millisecondsSinceEpoch,
       'is_completed': isCompleted ? 1 : 0, // 存储完成状态
+      'sync_status': isSynced ? 1 : 0, // 存储同步状态
     };
   }
 
@@ -70,6 +74,7 @@ class ScheduleItem {
     bool? isAllDay,
     String? location,
     bool? isCompleted, // 添加完成状态字段
+    bool? isSynced, // 添加同步状态字段
   }) {
     return ScheduleItem(
       id: this.id,
@@ -82,6 +87,7 @@ class ScheduleItem {
       location: location ?? this.location,
       createdAt: this.createdAt,
       isCompleted: isCompleted ?? this.isCompleted, // 保留完成状态
+      isSynced: isSynced ?? this.isSynced, // 保留同步状态
     );
   }
 

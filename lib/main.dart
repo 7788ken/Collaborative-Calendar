@@ -766,10 +766,13 @@ class _MainPageState extends State<MainPage> {
   // 显示导入日历对话框
   void _showImportCalendarDialog(BuildContext context) {
     final idController = TextEditingController();
+    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('导入共享日历'),
           content: Column(
@@ -792,7 +795,7 @@ class _MainPageState extends State<MainPage> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                navigator.pop();
               },
               child: const Text('取消'),
             ),
@@ -800,36 +803,32 @@ class _MainPageState extends State<MainPage> {
               onPressed: () async {
                 if (idController.text.trim().isNotEmpty) {
                   final shareCode = idController.text.trim();
-                  final calendarManager = Provider.of<CalendarBookManager>(
-                    context,
-                    listen: false,
-                  );
 
                   // 关闭输入对话框
-                  Navigator.of(context).pop();
+                  navigator.pop();
                   
                   // 关闭侧边栏
-                  Navigator.pop(context); // 添加这行代码来关闭侧边栏
+                  navigator.pop();
 
-                  // 使用全局 ScaffoldMessengerState 而非依赖于传入的 context
-                  final scaffoldMessenger = ScaffoldMessenger.of(context);
-                  
                   // 使用一个变量跟踪对话框是否显示
                   bool isDialogShowing = true;
                   
                   // 显示加载对话框
                   showDialog(
-                    context: context,
+                    context: dialogContext,
                     barrierDismissible: false,
-                    builder: (dialogContext) {
-                      return const AlertDialog(
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text('正在从云端导入日历...'),
-                          ],
+                    builder: (loadingContext) {
+                      return WillPopScope(
+                        onWillPop: () async => false,
+                        child: const AlertDialog(
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text('正在从云端导入日历...'),
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -837,12 +836,11 @@ class _MainPageState extends State<MainPage> {
 
                   try {
                     // 调用API导入日历
-                    final success = await calendarManager
-                        .importSharedCalendarFromCloud(shareCode);
+                    final success = await calendarManager.importSharedCalendarFromCloud(shareCode);
 
                     // 如果对话框仍在显示，则关闭它
-                    if (isDialogShowing) {
-                      Navigator.of(context).pop();
+                    if (isDialogShowing && navigator.mounted) {
+                      navigator.pop();
                       isDialogShowing = false;
                     }
 
@@ -864,8 +862,8 @@ class _MainPageState extends State<MainPage> {
                     }
                   } catch (e) {
                     // 如果对话框仍在显示，则关闭它
-                    if (isDialogShowing) {
-                      Navigator.of(context).pop();
+                    if (isDialogShowing && navigator.mounted) {
+                      navigator.pop();
                       isDialogShowing = false;
                     }
 
@@ -960,12 +958,14 @@ class _MainPageState extends State<MainPage> {
   void _copyToNewLocalCalendar(BuildContext context, CalendarBook sourceBook) {
     final nameController = TextEditingController(text: '${sourceBook.name} 副本');
     Color selectedColor = sourceBook.color;
+    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (builderContext, setState) {
             return AlertDialog(
               title: const Text('复制到新日历'),
               content: Column(
@@ -988,71 +988,65 @@ class _MainPageState extends State<MainPage> {
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
-                    children:
-                        [
-                              Colors.red,
-                              Colors.pink,
-                              Colors.purple,
-                              Colors.deepPurple,
-                              Colors.indigo,
-                              Colors.blue,
-                              Colors.lightBlue,
-                              Colors.cyan,
-                              Colors.teal,
-                              Colors.green,
-                              Colors.lightGreen,
-                              Colors.lime,
-                              Colors.yellow,
-                              Colors.amber,
-                              Colors.orange,
-                              Colors.deepOrange,
-                            ]
-                            .map(
-                              (color) => GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    selectedColor = color;
-                                  });
-                                },
-                                child: Container(
-                                  width: 30,
-                                  height: 30,
-                                  margin: const EdgeInsets.all(2),
-                                  decoration: BoxDecoration(
-                                    color: color,
-                                    shape: BoxShape.circle,
-                                    border:
-                                        selectedColor == color
-                                            ? Border.all(
-                                              color: Colors.black,
-                                              width: 2,
-                                            )
-                                            : null,
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
+                    children: [
+                      Colors.red,
+                      Colors.pink,
+                      Colors.purple,
+                      Colors.deepPurple,
+                      Colors.indigo,
+                      Colors.blue,
+                      Colors.lightBlue,
+                      Colors.cyan,
+                      Colors.teal,
+                      Colors.green,
+                      Colors.lightGreen,
+                      Colors.lime,
+                      Colors.yellow,
+                      Colors.amber,
+                      Colors.orange,
+                      Colors.deepOrange,
+                    ].map(
+                      (color) => GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            selectedColor = color;
+                          });
+                        },
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          margin: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: selectedColor == color
+                                ? Border.all(color: Colors.black, width: 2)
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ).toList(),
                   ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () {
-                    Navigator.of(context).pop();
+                    Navigator.of(dialogContext).pop();
                   },
                   child: const Text('取消'),
                 ),
                 TextButton(
                   onPressed: () async {
                     if (nameController.text.trim().isNotEmpty) {
-                      Navigator.of(context).pop();
+                      // 先关闭创建对话框
+                      Navigator.of(dialogContext).pop();
 
                       // 显示加载提示
                       showDialog(
-                        context: context,
+                        context: dialogContext,
                         barrierDismissible: false,
-                        builder: (BuildContext context) {
+                        builder: (loadingContext) {
                           return const AlertDialog(
                             content: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -1067,12 +1061,6 @@ class _MainPageState extends State<MainPage> {
                       );
 
                       try {
-                        final calendarManager =
-                            Provider.of<CalendarBookManager>(
-                              context,
-                              listen: false,
-                            );
-
                         // 复制日历
                         await calendarManager.copyCalendarBook(
                           sourceBook.id,
@@ -1081,10 +1069,10 @@ class _MainPageState extends State<MainPage> {
                         );
 
                         // 关闭加载对话框
-                        Navigator.of(context).pop();
+                        Navigator.of(dialogContext).pop();
 
                         // 显示成功提示
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        scaffoldMessenger.showSnackBar(
                           SnackBar(
                             content: Text(
                               '日历"${nameController.text.trim()}"创建成功',
@@ -1093,12 +1081,14 @@ class _MainPageState extends State<MainPage> {
                         );
                       } catch (e) {
                         // 关闭加载对话框
-                        Navigator.of(context).pop();
+                        Navigator.of(dialogContext).pop();
 
                         // 显示错误提示
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('复制日历失败: $e')));
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: Text('复制日历失败: $e'),
+                          ),
+                        );
                       }
                     }
                   },

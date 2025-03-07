@@ -1170,230 +1170,100 @@ class CalendarBookManager with ChangeNotifier {
   }
   
   // 从云端下载最新的日程数据
-  Future<void> fetchSharedCalendarUpdates(String calendarId) async {
+  Future<bool> fetchSharedCalendarUpdates(String calendarId) async {
     try {
-      debugPrint('开始从云端获取日历更新，日历ID: $calendarId');
-      
-      // 确保是共享日历
-      final calendarBook = _books.firstWhere(
-        (book) => book.id == calendarId && book.isShared,
-        orElse: () => throw Exception('找不到共享日历本: $calendarId'),
-      );
+      debugPrint('开始获取共享日历更新，日历ID: $calendarId');
       
       // 获取分享码
       final shareCode = getShareId(calendarId);
       if (shareCode == null) {
-        throw Exception('找不到日历本的分享码');
+        debugPrint('未找到分享码，无法获取更新');
+        return false;
       }
       
-      debugPrint('获取到分享码: $shareCode');
+      // 获取服务器上的日程数据
+      final List<dynamic> schedulesData = await _apiService.getSchedules(shareCode);
+      debugPrint('从服务器获取到 ${schedulesData.length} 条日程数据');
       
-      // 从API获取最新日历信息，如有需要更新日历数据
-      final calendarData = await _apiService.getSharedCalendar(shareCode);
+      // 获取本地未同步的日程
+      final unsyncedSchedules = await _dbHelper.getUnsyncedSchedules(calendarId);
+      debugPrint('本地有 ${unsyncedSchedules.length} 条未同步的日程');
       
-      // 检查日历本信息是否需要更新
-      final name = calendarData['name'] as String;
-      final colorHex = calendarData['color'] as String;
-      final colorValue = int.parse(colorHex, radix: 16);
+      // 创建一个映射来存储未同步日程的ID
+      final unsyncedIds = Set<String>.from(unsyncedSchedules.map((s) => s.id));
       
-      if (name != calendarBook.name || colorValue != calendarBook.color.value) {
-        // 更新日历本信息
-        await updateBookNameAndColor(calendarId, name, Color(colorValue));
-        debugPrint('已更新日历本信息: 名称=$name, 颜色=$colorHex');
-      }
+      // 开始数据库事务
+      final db = await _dbHelper.database;
       
-      // 从API获取最新日程
-      final schedulesData = await _apiService.getSchedules(shareCode);
-      debugPrint('从服务器获取到 ${schedulesData.length} 个日程');
-      
-      if (schedulesData.isEmpty) {
-        debugPrint('警告：服务器返回空的日程列表');
-        return;
-      }
-      
-      // 保存当前任务完成状态，以便在导入新数据后恢复
-      final taskCompletionStatus = await _getTaskStatusForCalendar(calendarId);
-      debugPrint('已保存 ${taskCompletionStatus.length} 个任务完成状态记录');
-      
-      // 获取当前日历的所有日程用于后续比较
-      final existingSchedules = await _dbHelper.getSchedules(calendarId);
-      debugPrint('当前日历中有 ${existingSchedules.length} 个日程');
-      
-      // 清除旧的日程前先进行备份
-      final backupSchedules = List<ScheduleItem>.from(existingSchedules);
+      // 使用批处理来提高性能
+      final batch = db.batch();
       
       try {
-        // 开始数据库事务
-        final db = await _dbHelper.database;
-        await db.transaction((txn) async {
-          // 清除旧的日程
-          await txn.delete(
-            'schedules',
-            where: 'calendar_id = ?',
-            whereArgs: [calendarId],
-          );
-          debugPrint('已清除旧的日程数据');
-          
-          // 导入新的日程
-          int successCount = 0;
-          List<String> failedSchedules = [];
-          
-          for (var scheduleData in schedulesData) {
-            try {
-              // 确保日期字段是整数时间戳
-              var startTime = scheduleData['startTime'];
-              var endTime = scheduleData['endTime'];
-              
-              if (startTime == null || endTime == null) {
-                debugPrint('警告: 日程缺少开始或结束时间，跳过');
-                continue;
-              }
-              
-              // 处理开始时间
-              DateTime startDateTime;
-              if (startTime is int) {
-                startDateTime = DateTime.fromMillisecondsSinceEpoch(startTime);
-              } else if (startTime is String) {
-                try {
-                  if (startTime.contains('T') || startTime.contains(' ')) {
-                    startDateTime = DateTime.parse(startTime);
-                  } else {
-                    startDateTime = DateTime.fromMillisecondsSinceEpoch(int.parse(startTime));
-                  }
-                } catch (e) {
-                  debugPrint('解析开始时间失败: $e，使用当前时间');
-                  startDateTime = DateTime.now();
-                }
-              } else {
-                debugPrint('无效的开始时间格式: $startTime，使用当前时间');
-                startDateTime = DateTime.now();
-              }
-              
-              // 处理结束时间
-              DateTime endDateTime;
-              if (endTime is int) {
-                endDateTime = DateTime.fromMillisecondsSinceEpoch(endTime);
-              } else if (endTime is String) {
-                try {
-                  if (endTime.contains('T') || endTime.contains(' ')) {
-                    endDateTime = DateTime.parse(endTime);
-                  } else {
-                    endDateTime = DateTime.fromMillisecondsSinceEpoch(int.parse(endTime));
-                  }
-                } catch (e) {
-                  debugPrint('解析结束时间失败: $e，使用开始时间加一小时');
-                  endDateTime = startDateTime.add(const Duration(hours: 1));
-                }
-              } else {
-                debugPrint('无效的结束时间格式: $endTime，使用开始时间加一小时');
-                endDateTime = startDateTime.add(const Duration(hours: 1));
-              }
-              
-              // 获取日程ID
-              final scheduleId = scheduleData['id'] as String? ?? const Uuid().v4();
-              
-              // 检查是否有保存的完成状态
-              bool isCompleted = false;
-              if (taskCompletionStatus.containsKey(scheduleId)) {
-                isCompleted = taskCompletionStatus[scheduleId]!;
-                debugPrint('使用保存的完成状态: $scheduleId = $isCompleted');
-              } else {
-                // 如果没有保存的状态，使用服务器返回的状态
-                isCompleted = scheduleData['isCompleted'] == 1 || scheduleData['isCompleted'] == true;
-                debugPrint('使用服务器返回的完成状态: $scheduleId = $isCompleted');
-              }
-              
-              // 创建日程对象
-              final schedule = ScheduleItem(
-                id: scheduleId,
-                calendarId: calendarId,
-                title: scheduleData['title'] as String? ?? '无标题',
-                description: scheduleData['description'] as String?,
-                startTime: startDateTime,
-                endTime: endDateTime,
-                isAllDay: scheduleData['isAllDay'] == 1 || scheduleData['isAllDay'] == true,
-                location: scheduleData['location'] as String?,
-                isCompleted: isCompleted,
-              );
-              
-              // 插入日程
-              await txn.insert(
-                'schedules',
-                schedule.toMap(),
-                conflictAlgorithm: ConflictAlgorithm.replace,
-              );
-              
-              // 保存完成状态到 SharedPreferences
-              if (isCompleted) {
-                final prefs = await SharedPreferences.getInstance();
-                final taskKey = 'task_completed_${schedule.id}';
-                await prefs.setBool(taskKey, true);
-                debugPrint('已保存任务完成状态: $taskKey = true');
-              }
-              
-              successCount++;
-            } catch (e) {
-              debugPrint('导入单个日程时出错: $e');
-              failedSchedules.add(scheduleData['id'] as String? ?? '未知ID');
-              // 继续处理其他日程
-            }
-          }
-          
-          debugPrint('成功导入 $successCount 个日程');
-          if (failedSchedules.isNotEmpty) {
-            debugPrint('导入失败的日程: $failedSchedules');
-          }
-        });
+        // 1. 删除已同步的日程（保留未同步的）
+        batch.delete(
+          'schedules',
+          where: 'calendar_id = ? AND (sync_status = 1 OR sync_status IS NULL)',
+          whereArgs: [calendarId],
+        );
         
-        // 更新最后同步时间
-        final serverUpdateTime = await _apiService.getCalendarLastUpdateTime(shareCode);
-        if (serverUpdateTime != null) {
-          _lastUpdateTimeMap[calendarId] = serverUpdateTime;
-          
-          // 保存最后同步时间到SharedPreferences
-          final prefs = await SharedPreferences.getInstance();
-          final syncTimeKey = 'last_sync_time_$calendarId';
-          await prefs.setInt(syncTimeKey, serverUpdateTime.millisecondsSinceEpoch);
-          debugPrint('已更新最后同步时间: $serverUpdateTime');
+        // 2. 准备新日程数据的批量插入
+        for (final scheduleData in schedulesData) {
+          try {
+            final String scheduleId = scheduleData['id'] as String;
+            
+            // 跳过未同步的日程
+            if (unsyncedIds.contains(scheduleId)) {
+              debugPrint('跳过未同步的日程: $scheduleId');
+              continue;
+            }
+            
+            // 转换日期格式
+            final startTime = scheduleData['startTime'];
+            final endTime = scheduleData['endTime'];
+            
+            final Map<String, dynamic> dbScheduleData = {
+              'id': scheduleId,
+              'calendar_id': calendarId,
+              'title': scheduleData['title'],
+              'description': scheduleData['description'],
+              'start_time': startTime is int ? startTime : DateTime.parse(startTime.toString()).millisecondsSinceEpoch,
+              'end_time': endTime is int ? endTime : DateTime.parse(endTime.toString()).millisecondsSinceEpoch,
+              'is_all_day': scheduleData['isAllDay'] == true || scheduleData['isAllDay'] == 1 ? 1 : 0,
+              'location': scheduleData['location'],
+              'created_at': DateTime.now().millisecondsSinceEpoch,
+              'is_completed': scheduleData['isCompleted'] == true || scheduleData['isCompleted'] == 1 ? 1 : 0,
+              'sync_status': 1
+            };
+            
+            batch.insert(
+              'schedules',
+              dbScheduleData,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          } catch (e) {
+            debugPrint('处理单个日程时出错: $e');
+            continue;
+          }
         }
         
-        // 通知监听器更新UI
+        // 3. 执行批处理操作
+        await batch.commit(noResult: true, continueOnError: true);
+        debugPrint('批量更新数据库完成');
+        
+        // 通知监听器数据已更新
         notifyListeners();
         
+        debugPrint('日历更新完成');
+        return true;
       } catch (e) {
-        debugPrint('导入日程时出错: $e');
-        
-        // 尝试恢复备份
-        try {
-          debugPrint('正在恢复备份数据...');
-          final db = await _dbHelper.database;
-          await db.transaction((txn) async {
-            // 清除可能已导入的数据
-            await txn.delete(
-              'schedules',
-              where: 'calendar_id = ?',
-              whereArgs: [calendarId],
-            );
-            
-            // 恢复备份数据
-            for (var schedule in backupSchedules) {
-              await txn.insert(
-                'schedules',
-                schedule.toMap(),
-                conflictAlgorithm: ConflictAlgorithm.replace,
-              );
-            }
-          });
-          debugPrint('成功恢复备份数据');
-        } catch (e) {
-          debugPrint('恢复备份数据时出错: $e');
-          // 如果恢复备份也失败，抛出异常
-          rethrow;
-        }
+        debugPrint('批处理执行过程中出错: $e');
+        // 出错时尝试回滚批处理
+        await batch.commit(noResult: true);
+        return false;
       }
     } catch (e) {
-      debugPrint('获取日历更新时出错: $e');
-      rethrow;
+      debugPrint('获取共享日历更新时出错: $e');
+      return false;
     }
   }
   
