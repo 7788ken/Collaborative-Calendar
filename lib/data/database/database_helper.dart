@@ -28,12 +28,30 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'calendar_app.db');
 
-    return await openDatabase(path, version: 2, onCreate: _createDatabase, onUpgrade: _upgradeDatabase);
+    return await openDatabase(path, version: 3, onCreate: _createDatabase, onUpgrade: _upgradeDatabase);
   }
 
   Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
-    // 升级数据库
+    debugPrint('数据库升级: 从版本 $oldVersion 升级到版本 $newVersion');
+
+    if (oldVersion < 2) {
+      // 版本1到版本2：添加is_completed列到schedules表
+      debugPrint('数据库升级: 为schedules表添加is_completed列');
+      try {
+        await db.execute('ALTER TABLE schedules ADD COLUMN is_completed INTEGER DEFAULT 0');
+        debugPrint('数据库升级: is_completed列添加成功');
+      } catch (e) {
+        debugPrint('数据库升级失败: $e');
+        // 如果列已存在，SQLite会抛出错误，这里我们可以忽略
+        if (!e.toString().contains('duplicate column')) {
+          rethrow;
+        } else {
+          debugPrint('数据库升级: is_completed列已存在，跳过');
+        }
+      }
+    }
   }
+
   Future<void> _createDatabase(Database db, int version) async {
     // 创建日历本表
     await db.execute('''
@@ -55,7 +73,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE schedules(
         id TEXT PRIMARY KEY,
-        calendar_id TEXT NOT NULL,//对应日历本ID
+        calendar_id TEXT NOT NULL, -- 对应日历本ID
         title TEXT NOT NULL,
         description TEXT,
         start_time INTEGER NOT NULL,
@@ -72,7 +90,7 @@ class DatabaseHelper {
     ''');
 
     // 初始化默认日历本
-    await db.insert('calendars', {'id': 'default', 'title': '我的日历', 'color': Colors.blue.value, 'is_shared': 0, 'owner_id': null, 'shared_with_users': '[]', 'created_at': DateTime.now().millisecondsSinceEpoch, 'updated_at': DateTime.now().millisecondsSinceEpoch, 'share_code': null, 'share_expire_time': null, 'is_deleted': 0, 'is_completed': 0, 'sync_status': 1});
+    await db.insert('calendars', {'id': 'default', 'title': '我的日历', 'color': Colors.blue.value, 'is_shared': 0, 'owner_id': null, 'shared_with_users': '[]', 'created_at': DateTime.now().millisecondsSinceEpoch, 'updated_at': DateTime.now().millisecondsSinceEpoch, 'share_code': null, 'share_expire_time': null});
   }
 
   // ==================== 日历本操作 ====================
@@ -254,9 +272,7 @@ class DatabaseHelper {
         return [];
       }
 
-      return List.generate(maps.length, (i) {
-        return ScheduleItem(id: maps[i]['id'], calendarId: maps[i]['calendar_id'], title: maps[i]['title'], description: maps[i]['description'], startTime: DateTime.fromMillisecondsSinceEpoch(maps[i]['start_time']), endTime: DateTime.fromMillisecondsSinceEpoch(maps[i]['end_time']), isAllDay: maps[i]['is_all_day'] == 1, location: maps[i]['location'], isCompleted: maps[i]['is_completed'] == 1);
-      });
+      return List.generate(maps.length, (i) => ScheduleItem(id: maps[i]['id'], calendarId: maps[i]['calendar_id'], title: maps[i]['title'], description: maps[i]['description'], startTime: DateTime.fromMillisecondsSinceEpoch(maps[i]['start_time']), endTime: DateTime.fromMillisecondsSinceEpoch(maps[i]['end_time']), isAllDay: maps[i]['is_all_day'] == 1, location: maps[i]['location'], isCompleted: maps[i]['is_completed'] == 1));
     } catch (e) {
       debugPrint('DatabaseHelper: 根据ID获取日程时出错: $e');
       return [];

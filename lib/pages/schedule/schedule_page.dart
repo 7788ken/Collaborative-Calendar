@@ -157,78 +157,9 @@ class _SchedulePageState extends State<SchedulePage> with SingleTickerProviderSt
     }
   }
 
-  // 加载日程数据
+  // 加载日程数据(本地)
   Future<void> _loadSchedules() async {
     // 确保无论什么情况都重新加载数据
-    print('开始加载日程数据');
-
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-      });
-    }
-
-    try {
-      String? activeCalendarId;
-
-      if (mounted) {
-        final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
-        activeCalendarId = calendarManager.activeBook?.id;
-
-        // 更新当前活跃的日历本ID
-        _currentActiveCalendarId = activeCalendarId;
-      }
-
-      if (activeCalendarId == null) {
-        if (mounted) {
-          setState(() {
-            _scheduleItems = [];
-            _scheduleItemsMap = {};
-            _isLoading = false;
-          });
-        }
-        return;
-      }
-
-      // 获取当前月和前后一个月的日程（为了展示跨月数据）
-      final startDate = DateTime(_currentMonth.year, _currentMonth.month - 1, 1);
-      final endDate = DateTime(_currentMonth.year, _currentMonth.month + 2, 0);
-
-      print('刷新日程: 加载 ${startDate.toString()} 到 ${endDate.toString()} 的数据');
-
-      // 从数据库加载日程数据
-      final items = await _scheduleService.getSchedulesInRange(activeCalendarId, startDate, endDate);
-
-      print('刷新日程: 加载了 ${items.length} 条日程数据');
-
-      // 确保任务完成状态是最新的
-      if (mounted) {
-        final scheduleData = Provider.of<ScheduleData>(context, listen: false);
-        await scheduleData.loadTaskCompletionStatus();
-        print('已重新加载任务完成状态数据');
-      }
-
-      // 更新界面
-      if (mounted) {
-        setState(() {
-          _scheduleItems = items;
-          _scheduleItemsMap = _groupSchedulesByDate(items);
-          _isLoading = false;
-        });
-        print('日历页面数据已更新，日程数量: ${items.length}');
-      }
-    } catch (e) {
-      print('加载日程数据时出错: $e');
-      if (mounted) {
-        setState(() {
-          _scheduleItems = [];
-          _scheduleItemsMap = {};
-          _isLoading = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载日程失败: $e')));
-      }
-    }
   }
 
   // 按日期分组日程数据

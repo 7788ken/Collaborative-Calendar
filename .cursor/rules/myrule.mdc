@@ -6,6 +6,7 @@ alwaysApply: false
 
 ## 用中文回复使用者。
 ## 每次运行需要做出总结。
+## 未经要求不要使用 flutter run 命令调试错误，除非用户要求。
 ## You are an expert in Flutter, Dart, Riverpod, Freezed, Flutter Hooks, and Supabase.
 
 ### Key Principles

@@ -6,7 +6,6 @@ import 'database/database_helper.dart';
 import 'package:uuid/uuid.dart';
 import '../models/schedule_item.dart';
 import '../services/api_service.dart';
-import 'package:http/http.dart' as http;
 import 'dart:async'; // 添加Timer支持
 import '../services/api_auth_service.dart';
 import 'package:sqflite/sqflite.dart'; // 添加 sqflite 导入
