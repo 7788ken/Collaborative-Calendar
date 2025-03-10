@@ -1419,30 +1419,11 @@ class CalendarBookManager with ChangeNotifier {
   @override
   void dispose() {
     // 取消定时器
-    _updateCheckTimer?.cancel();
-    super.dispose();
   }
 
   // 启动定时器，定期检查日历更新
   void _startUpdateCheckTimer() {
     // 如果定时同步被禁用，则直接返回
-    if (!_enablePeriodicSync) {
-      debugPrint('定时同步功能已关闭，不启动定时器');
-      return;
-    }
-
-    // 确保先取消之前的定时器
-    _updateCheckTimer?.cancel();
-
-    debugPrint('启动日历更新检查定时器，间隔: $_updateCheckInterval');
-
-    // 创建新的定时器
-    _updateCheckTimer = Timer.periodic(_updateCheckInterval, (timer) {
-      debugPrint('定时器触发：开始检查所有共享日历更新');
-      updateAllSharedCalendarsTimes().catchError((error) {
-        debugPrint('定时检查日历更新时出错: $error');
-      });
-    });
   }
 
   // 从API数据创建日程对象

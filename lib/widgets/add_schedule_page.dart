@@ -37,12 +37,6 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
     if (widget.scheduleItem != null) {
       final item = widget.scheduleItem!;
       // 添加调试日志，显示传入的日程项信息
-      print('编辑模式: 接收到的日程项信息:');
-      print('  ID: ${item.id}');
-      print('  标题: ${item.title}');
-      print('  日历本ID: ${item.calendarId}');
-      print('  开始时间: ${item.startTime}');
-      print('  结束时间: ${item.endTime}');
 
       _selectedDate = DateTime(item.startTime.year, item.startTime.month, item.startTime.day);
       _startTime = TimeOfDay(hour: item.startTime.hour, minute: item.startTime.minute);
@@ -119,10 +113,7 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
 
       // 添加调试日志，显示当前活动日历本和要编辑的日程日历本
-      if (widget.scheduleItem != null) {
-        print('编辑日程: 当前活动日历本ID=${calendarManager.activeBook!.id}');
-        print('编辑日程: 原始日程所属日历本ID=${widget.scheduleItem!.calendarId}');
-      }
+      if (widget.scheduleItem != null) {}
 
       // 根据是新建还是编辑选择不同的处理逻辑
       if (widget.scheduleItem == null) {
@@ -133,7 +124,6 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         return await _updateExistingSchedule(calendarManager);
       }
     } catch (e) {
-      print('保存日程时出错: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败: $e')));
       }
@@ -164,20 +154,11 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       );
 
       // 添加调试输出
-      print('准备创建新日程: ${newSchedule.title}');
-      print('日程ID: ${newSchedule.id}');
-      print('日程所属日历本ID: ${newSchedule.calendarId}');
-      print('是否为共享日历: $isSharedCalendar');
-      print('初始同步状态: ${newSchedule.isSynced}');
-      print('日程详细信息: ${newSchedule.toMap()}');
 
       // 保存到数据库
-      print('调用添加日程方法');
       try {
         await _scheduleService.addSchedule(newSchedule);
-        print('日程添加成功');
       } catch (e) {
-        print('日程添加失败: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('添加失败: ${e.toString()}')));
         }
@@ -193,7 +174,6 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       // 返回上一页
       return _finishAndReturnSuccess();
     } catch (e) {
-      print('创建新日程时出错: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('创建失败: $e')));
       }
@@ -212,29 +192,18 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
 
       // 首先从数据库中查询该日程的真实信息，确保获取正确的日历本ID
       final scheduleId = originalItem.id;
-      print('从数据库查询日程的真实信息, ID: $scheduleId');
 
       final dbSchedules = await _scheduleService.getScheduleById(scheduleId);
       if (dbSchedules.isEmpty) {
-        print('错误: 在数据库中未找到ID为 $scheduleId 的日程');
         throw Exception('在数据库中未找到该日程');
       }
 
       final dbSchedule = dbSchedules.first;
       final realCalendarId = dbSchedule.calendarId;
 
-      print('数据库中的日程信息:');
-      print('  - ID: ${dbSchedule.id}');
-      print('  - 标题: ${dbSchedule.title}');
-      print('  - 日历本ID: $realCalendarId');
-      print('  - 传入的日历本ID: ${originalItem.calendarId}');
-
-      if (realCalendarId != originalItem.calendarId) {
-        print('警告: 传入的日历本ID与数据库中的不一致!');
-      }
+      if (realCalendarId != originalItem.calendarId) {}
 
       // 创建更新后的日程项，显式强制使用数据库中的日历本ID
-      print('创建更新后的日程项，强制使用数据库中的日历本ID: $realCalendarId');
       final updatedSchedule = ScheduleItem(
         id: scheduleId, // 保持原ID
         calendarId: realCalendarId, // 强制使用数据库中的日历本ID

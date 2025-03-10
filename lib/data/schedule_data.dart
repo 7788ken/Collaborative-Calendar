@@ -88,57 +88,7 @@ class ScheduleData extends ChangeNotifier {
 
   // 加载所有任务状态
   Future<void> loadTaskCompletionStatus() async {
-    if (_isDisposed) {
-      debugPrint('警告: 尝试加载已销毁对象的任务状态');
-      return;
-    }
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final allKeys = prefs.getKeys();
-
-      // 创建新的状态Map
-      final Map<String, bool> newStatus = {};
-
-      for (final key in allKeys) {
-        if (key.startsWith('task_')) {
-          final taskKey = key.substring(5); // 去掉前缀'task_'
-          newStatus[taskKey] = prefs.getBool(key) ?? false;
-        }
-      }
-
-      // 一次性更新，减少不必要的刷新
-      _taskCompletionStatus = newStatus;
-
-      debugPrint('已加载 ${_taskCompletionStatus.length} 个任务状态');
-
-      // 立即通知监听者
-      try {
-        notifyListeners();
-      } catch (e) {
-        debugPrint('加载任务状态后通知出错: $e');
-      }
-
-      // 延迟后再次通知，确保所有UI组件都能收到更新
-      if (!_isDisposed) {
-        // 检查对象是否已被销毁
-        Future.delayed(Duration(milliseconds: 50), () {
-          try {
-            if (!_isDisposed) {
-              // 再次检查，因为在延迟期间可能被销毁
-              notifyListeners();
-              debugPrint('已发送延迟通知');
-            } else {
-              debugPrint('对象已销毁，跳过延迟通知');
-            }
-          } catch (e) {
-            debugPrint('发送延迟通知时出错: $e');
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('加载任务状态时出错: $e');
-    }
+    // 待实现
   }
 
   // 获取指定日期的已完成任务数量

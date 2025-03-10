@@ -323,36 +323,74 @@ class _MainPageState extends State<MainPage> {
             // 日历本列表(这部份可以上下滑动)
             Expanded(
               // 添加Expanded让列表部分占用剩余空间并可滚动
-              child: Consumer<CalendarBookManager>(
-                builder: (context, calendarManager, _) {
-                  final activeBook = calendarManager.activeBook;
-                  if (activeBook == null) {
-                    return const Center(child: Text('没有可用的日历本'));
-                  }
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children:
+                    calendarManager.books
+                        .map(
+                          (book) => ListTile(
+                            title: Text(book.name, overflow: TextOverflow.ellipsis),
+                            subtitle: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    // color: book.color.withAlpha(70),
+                                    color: book.isShared ? book.color.withAlpha(20) : Colors.grey.shade300,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(!book.isShared ? '本地日历' : '云端日历', style: TextStyle(fontSize: 10, color: book.isShared ? book.color.withAlpha(200) : Colors.grey)),
+                                ),
+                                if (book.isShared) // 如果是共享日历，显示最后更新时间
+                                  Row(
+                                    children: [
+                                      const SizedBox(width: 4),
+                                      Builder(
+                                        builder: (context) {
+                                          // 获取日历最后更新时间
+                                          final updateTime = calendarManager.getLastUpdateTime(book.id);
+                                          final timeText = 'TODO:待实现';
 
-                  return FutureBuilder<List<dynamic>>(
-                    future: ScheduleService().getSchedules(activeBook.id),
-                    builder: (ctx, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return Center(child: Text('加载失败: ${snapshot.error}'));
-                      }
-                      final schedules = snapshot.data ?? [];
-                      if (schedules.isEmpty) {
-                        return const Center(child: Text('暂无日程'));
-                      }
-                      return ListView.builder(
-                        itemCount: schedules.length,
-                        itemBuilder: (ctx, index) {
-                          final schedule = schedules[index];
-                          return ListTile(title: Text(schedule.title), subtitle: Text('${schedule.startTime.toString().substring(0, 16)} - ${schedule.endTime.toString().substring(0, 16)}'));
-                        },
-                      );
-                    },
-                  );
-                },
+                                          return Text('最后更新: $timeText', style: TextStyle(fontSize: 10, color: Colors.blue.shade700));
+                                        },
+                                      ),
+                                      // 添加刷新按钮（保持原有的布局结构）
+                                      const SizedBox(width: 4),
+                                      SizedBox(
+                                        height: 12,
+                                        width: 12,
+                                        child: IconButton(
+                                          icon: const Icon(Icons.sync, size: 12, color: Colors.blue),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          tooltip: '检查更新',
+                                          onPressed: () {
+                                            // TODO: 实现检查更新功能
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else if (!book.isShared)
+                                  GestureDetector(
+                                    onTap: () {
+                                      _shareCalendar(context, book);
+                                    },
+                                    child: Container(margin: const EdgeInsets.only(left: 4), padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)), child: const Text('分享', style: TextStyle(fontSize: 10, color: Colors.blue))),
+                                  ),
+                              ],
+                            ),
+                            trailing: book.id == currentBook?.id ? const Icon(Icons.check, color: Colors.green) : null,
+                            onTap: () {
+                              calendarManager.setActiveBook(book.id);
+                              Navigator.pop(context);
+                            },
+                            onLongPress: () {
+                              _showCalendarOptions(context, book);
+                            },
+                          ),
+                        )
+                        .toList(),
               ),
             ),
 
