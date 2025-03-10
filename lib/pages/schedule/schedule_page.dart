@@ -18,7 +18,6 @@ class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
 
   // 添加全局Key以便在任何地方刷新
-  static final GlobalKey<_SchedulePageState> globalKey = GlobalKey<_SchedulePageState>();
 
   // 添加刷新方法
   static void refreshSchedules(BuildContext context) {
@@ -26,13 +25,6 @@ class SchedulePage extends StatefulWidget {
     debugPrint('调用刷新日程方法');
 
     try {
-      // 尝试通过全局Key刷新
-      if (globalKey.currentState != null && globalKey.currentState!.mounted) {
-        debugPrint('通过GlobalKey找到SchedulePage状态，强制刷新日程');
-        globalKey.currentState!._loadSchedules();
-        return;
-      }
-
       // 备用方法：使用Provider通知所有监听者
       try {
         // 检查context是否仍然有效

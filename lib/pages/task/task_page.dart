@@ -523,13 +523,6 @@ class _TaskPageState extends State<TaskPage> {
               TaskPage.refreshTasks(context);
             }
 
-            // 刷新日历页面
-            if (SchedulePage.globalKey.currentState != null) {
-              SchedulePage.globalKey.currentState!.reloadSchedules();
-            } else {
-              SchedulePage.refreshSchedules(context);
-            }
-
             // 显示成功提示
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('任务已更新')));
           }
