@@ -12,6 +12,7 @@ class CalendarBook {
   final List<String> sharedWithUsers; // 共享给的用户列表
   final DateTime createdAt; // 添加创建时间
   final DateTime updatedAt; // 添加更新时间
+  final String? shareCode; // 分享码
 
   CalendarBook({
     required this.id,
@@ -22,6 +23,7 @@ class CalendarBook {
     this.sharedWithUsers = const [],
     DateTime? createdAt, // 创建时间参数
     DateTime? updatedAt, // 更新时间参数
+    this.shareCode, // 分享码参数
   }) : this.createdAt = createdAt ?? DateTime.now(),
        this.updatedAt = updatedAt ?? DateTime.now();
 
@@ -50,7 +52,17 @@ class CalendarBook {
     final String name = map['name'] ?? '默认日历';
     final int colorValue = map['color'] ?? Colors.blue.value;
 
-    return CalendarBook(id: id, name: name, color: Color(colorValue), isShared: map['isShared'] == 1, ownerId: map['ownerId'], sharedWithUsers: parseSharedUsers(), createdAt: map['createdAt'] != null ? DateTime.fromMillisecondsSinceEpoch(map['createdAt']) : DateTime.now(), updatedAt: map['updatedAt'] != null ? DateTime.fromMillisecondsSinceEpoch(map['updatedAt']) : DateTime.now());
+    return CalendarBook(
+      id: id,
+      name: name,
+      color: Color(colorValue),
+      isShared: map['isShared'] == 1,
+      ownerId: map['ownerId'],
+      sharedWithUsers: parseSharedUsers(),
+      createdAt: map['createdAt'] != null ? DateTime.fromMillisecondsSinceEpoch(map['createdAt']) : DateTime.now(),
+      updatedAt: map['updatedAt'] != null ? DateTime.fromMillisecondsSinceEpoch(map['updatedAt']) : DateTime.now(),
+      shareCode: map['shareCode'], // 添加分享码
+    );
   }
 
   // 将CalendarBook对象转换为Map（用于存储到数据库）
@@ -65,6 +77,7 @@ class CalendarBook {
       'sharedWithUsers': jsonEncode(sharedWithUsers),
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
+      'shareCode': shareCode, // 添加分享码
     };
   }
 
@@ -80,13 +93,14 @@ class CalendarBook {
       isShared: ownerId != null,
       createdAt: now, // 设置创建时间
       updatedAt: now, // 设置更新时间
+      shareCode: null, // 初始时没有分享码
     );
   }
 
   // 创建共享日历本
-  factory CalendarBook.shared({required String id, required String name, required Color color, required String ownerId}) {
+  factory CalendarBook.shared({required String id, required String name, required Color color, required String ownerId, String? shareCode}) {
     // 创建一个共享日历本实例
-    return CalendarBook(id: id, name: name, color: color, isShared: true, ownerId: ownerId, sharedWithUsers: []);
+    return CalendarBook(id: id, name: name, color: color, isShared: true, ownerId: ownerId, sharedWithUsers: [], shareCode: shareCode);
   }
 
   // 添加共享用户
@@ -96,7 +110,7 @@ class CalendarBook {
       updatedSharedUsers.add(userId);
     }
 
-    return CalendarBook(id: id, name: name, color: color, isShared: isShared, ownerId: ownerId, sharedWithUsers: updatedSharedUsers, createdAt: createdAt, updatedAt: updatedAt);
+    return CalendarBook(id: id, name: name, color: color, isShared: isShared, ownerId: ownerId, sharedWithUsers: updatedSharedUsers, createdAt: createdAt, updatedAt: updatedAt, shareCode: shareCode);
   }
 
   // 移除共享用户
@@ -104,21 +118,26 @@ class CalendarBook {
     final updatedSharedUsers = List<String>.from(sharedWithUsers);
     updatedSharedUsers.remove(userId);
 
-    return CalendarBook(id: id, name: name, color: color, isShared: isShared, ownerId: ownerId, sharedWithUsers: updatedSharedUsers, createdAt: createdAt, updatedAt: updatedAt);
+    return CalendarBook(id: id, name: name, color: color, isShared: isShared, ownerId: ownerId, sharedWithUsers: updatedSharedUsers, createdAt: createdAt, updatedAt: updatedAt, shareCode: shareCode);
   }
 
   // 更新日历本名称
   CalendarBook copyWithName(String newName) {
-    return CalendarBook(id: id, name: newName, color: color, isShared: isShared, ownerId: ownerId, sharedWithUsers: sharedWithUsers, createdAt: createdAt, updatedAt: updatedAt);
+    return CalendarBook(id: id, name: newName, color: color, isShared: isShared, ownerId: ownerId, sharedWithUsers: sharedWithUsers, createdAt: createdAt, updatedAt: updatedAt, shareCode: shareCode);
   }
 
   // 更新日历本颜色
   CalendarBook copyWithColor(Color newColor) {
-    return CalendarBook(id: id, name: name, color: newColor, isShared: isShared, ownerId: ownerId, sharedWithUsers: sharedWithUsers, createdAt: createdAt, updatedAt: updatedAt);
+    return CalendarBook(id: id, name: name, color: newColor, isShared: isShared, ownerId: ownerId, sharedWithUsers: sharedWithUsers, createdAt: createdAt, updatedAt: updatedAt, shareCode: shareCode);
+  }
+
+  // 更新分享码
+  CalendarBook copyWithShareCode(String? newShareCode) {
+    return CalendarBook(id: id, name: name, color: color, isShared: isShared, ownerId: ownerId, sharedWithUsers: sharedWithUsers, createdAt: createdAt, updatedAt: updatedAt, shareCode: newShareCode);
   }
 
   // 创建一个具有相同ID和属性的副本，但可以更改部分属性
-  CalendarBook copyWith({String? id, String? name, Color? color, String? ownerId, bool? isShared}) {
+  CalendarBook copyWith({String? id, String? name, Color? color, String? ownerId, bool? isShared, String? shareCode}) {
     return CalendarBook(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -128,6 +147,7 @@ class CalendarBook {
       sharedWithUsers: this.sharedWithUsers,
       createdAt: this.createdAt, // 保持创建时间不变
       updatedAt: DateTime.now(), // 更新时间为当前时间
+      shareCode: shareCode ?? this.shareCode, // 更新分享码
     );
   }
 

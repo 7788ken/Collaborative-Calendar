@@ -18,44 +18,27 @@ class ScheduleData extends ChangeNotifier {
     return _taskCompletionStatus[taskKey] ?? false;
   }
 
-  // 更新任务完成状态
-  Future<void> updateTaskCompletionStatus(String taskKey, bool isCompleted) async {
+  // 设置任务完成状态
+  Future<void> setTaskCompletionStatus(String taskKey, bool isCompleted) async {
     if (_isDisposed) {
       debugPrint('警告: 尝试更新已销毁对象的任务状态');
       return;
     }
 
+    // 更新内存中的状态
     _taskCompletionStatus[taskKey] = isCompleted;
-    // 立即通知监听者
-    // try {
-    //   notifyListeners();
-    // } catch (e) {
-    //   debugPrint('立即通知监听者时出错: $e');
-    // }
+
+    try {
+      notifyListeners();
+    } catch (e) {
+      debugPrint('更新任务状态时通知出错: $e');
+    }
 
     // 保存到SharedPreferences
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('task_$taskKey', isCompleted);
       debugPrint('任务状态已保存: $taskKey = $isCompleted');
-
-      // 保存完成后再次通知，确保状态完全更新
-      if (!_isDisposed) {
-        // 检查对象是否已被销毁
-        Future.delayed(Duration(milliseconds: 50), () {
-          try {
-            if (!_isDisposed) {
-              // 再次检查，因为在延迟期间可能被销毁
-              notifyListeners();
-              debugPrint('已发送保存后的延迟通知');
-            } else {
-              debugPrint('对象已销毁，跳过延迟通知');
-            }
-          } catch (e) {
-            debugPrint('发送延迟通知时出错: $e');
-          }
-        });
-      }
     } catch (e) {
       debugPrint('保存任务状态时出错: $e');
     }
@@ -88,7 +71,38 @@ class ScheduleData extends ChangeNotifier {
 
   // 加载所有任务状态
   Future<void> loadTaskCompletionStatus() async {
-    // 待实现
+    if (_isDisposed) {
+      debugPrint('警告: 尝试加载已销毁对象的任务状态');
+      return;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final allKeys = prefs.getKeys();
+
+      // 清空当前状态
+      _taskCompletionStatus.clear();
+
+      // 加载所有以 'task_' 开头的键
+      for (final key in allKeys) {
+        if (key.startsWith('task_')) {
+          final taskKey = key.substring(5); // 去掉 'task_' 前缀
+          final isCompleted = prefs.getBool(key) ?? false;
+          _taskCompletionStatus[taskKey] = isCompleted;
+        }
+      }
+
+      debugPrint('已加载 ${_taskCompletionStatus.length} 个任务完成状态记录');
+      _isLoaded = true;
+
+      try {
+        notifyListeners();
+      } catch (e) {
+        debugPrint('加载任务状态后通知出错: $e');
+      }
+    } catch (e) {
+      debugPrint('加载任务状态时出错: $e');
+    }
   }
 
   // 获取指定日期的已完成任务数量

@@ -7,9 +7,7 @@ import '../../models/schedule_item.dart';
 import '../../data/schedule_service.dart';
 import '../../data/calendar_book_manager.dart';
 import '../../widgets/add_schedule_page.dart';
-import '../../pages/schedule/schedule_page.dart';
 import 'widgets/task_item.dart';
-import '../../services/task_completion_service.dart';
 import 'package:sticky_headers/sticky_headers.dart';
 
 class TaskPage extends StatefulWidget {
@@ -95,7 +93,14 @@ class _TaskPageState extends State<TaskPage> {
     super.initState();
     // 添加搜索文本监听
     _searchController.addListener(_onSearchChanged);
-    _loadTasks();
+
+    // 加载任务完成状态
+    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+    scheduleData.loadTaskCompletionStatus().then((_) {
+      print('任务完成状态加载完成');
+      // 加载任务列表
+      _loadTasks();
+    });
   }
 
   @override
@@ -303,71 +308,9 @@ class _TaskPageState extends State<TaskPage> {
               TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
               TextButton(
                 onPressed: () async {
-                  Navigator.of(context).pop();
-
-                  try {
-                    // 生成任务键，用于从状态管理中移除
-                    final String taskKey = '${originalItem.startTime.year}-${originalItem.startTime.month}-${originalItem.startTime.day}-${originalItem.id}';
-
-                    // 获取日历管理器，用于获取分享码
-                    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
-                    final shareCode = calendarManager.getShareId(originalItem.calendarId);
-
-                    // 调用服务删除日程
-                    await _scheduleService.deleteSchedule(originalItem.id);
-
-                    if (mounted) {
-                      // 获取ScheduleData实例
-                      final scheduleData = Provider.of<ScheduleData>(context, listen: false);
-
-                      // 如果任务有完成状态记录，更新状态（设为false或移除）
-                      if (scheduleData.getTaskCompletionStatus(taskKey)) {
-                        // 添加振动反馈
-                        HapticFeedback.lightImpact();
-
-                        // 将任务状态从系统中移除
-                        scheduleData.removeTaskCompletionStatus(taskKey);
-                      }
-
-                      setState(() {
-                        // 从主列表中移除
-                        _scheduleItems.remove(originalItem);
-
-                        // 重新应用过滤器，而不是直接修改_filteredItems
-                        _applyFilters();
-                      });
-
-                      // 立即刷新日历页面
-                      SchedulePage.refreshSchedules(context);
-
-                      // 使用单次延迟刷新确保统计数据更新
-                      Future.delayed(const Duration(milliseconds: 300), () {
-                        if (mounted) {
-                          SchedulePage.refreshSchedules(context);
-                        }
-                      });
-
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('日程已删除')));
-
-                      print('任务"${taskItem.title}"已删除，键值: $taskKey');
-
-                      // 恢复滚动位置
-                      if (currentScrollPosition != null && _scrollController.hasClients) {
-                        Future.microtask(() {
-                          _scrollController.jumpTo(currentScrollPosition.clamp(0.0, _scrollController.position.maxScrollExtent));
-                        });
-                      }
-                    }
-                  } catch (e) {
-                    print('删除日程失败: $e');
-                    if (mounted) {
-                      setState(() {
-                        _isLoading = false;
-                      });
-
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: $e')));
-                    }
-                  }
+                  // 删除日程 todo 需要删除数据库中的日程
+                  // 刷新任务列表
+                  _loadTasks();
                 },
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
                 child: const Text('删除'),
@@ -381,6 +324,11 @@ class _TaskPageState extends State<TaskPage> {
     // 保存当前滚动位置
     final double? currentScrollPosition = _scrollController.hasClients ? _scrollController.offset : null;
 
+    // 更新UI状态
+    setState(() {
+      taskItem.isCompleted = !taskItem.isCompleted;
+    });
+
     // 找到对应的原始日程项，获取 ID
     final originalItem = _findOriginalScheduleItem(taskItem);
     if (originalItem == null) {
@@ -388,34 +336,47 @@ class _TaskPageState extends State<TaskPage> {
       return;
     }
 
-    // 更新UI状态
-    setState(() {
-      taskItem.isCompleted = !taskItem.isCompleted;
-    });
+    // 生成任务键
+    final String taskKey = '${originalItem.startTime.year}-${originalItem.startTime.month}-${originalItem.startTime.day}-${originalItem.id}';
 
-    // 使用统一的任务完成状态服务
-    TaskCompletionService.toggleTaskCompletion(
-      context,
-      originalItem,
-      onStateChanged: () {
-        // 立即刷新日历页面，仅在组件挂载时执行
-        if (!mounted) {
-          // debugPrint('任务页面：回调时组件已销毁，取消操作');
-          return;
+    // 获取 ScheduleData 实例
+    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+
+    // 更新 ScheduleData 中的任务完成状态
+    scheduleData
+        .setTaskCompletionStatus(taskKey, taskItem.isCompleted)
+        .then((_) {
+          print('任务完成状态已更新到 ScheduleData');
+        })
+        .catchError((error) {
+          print('更新 ScheduleData 中的任务完成状态时出错: $error');
+        });
+
+    // 更新数据库中的任务完成状态
+    _scheduleService
+        .updateTaskCompletionStatus(originalItem.id, taskItem.isCompleted)
+        .then((_) {
+          print('任务完成状态已更新到数据库');
+        })
+        .catchError((error) {
+          print('更新任务完成状态到数据库时出错: $error');
+          // 出错时不影响UI显示
+        });
+
+    // 添加振动反馈
+    HapticFeedback.lightImpact();
+
+    // 延迟刷新日历页面
+    _safeDelayedRefresh();
+
+    // 恢复滚动位置
+    if (currentScrollPosition != null && _scrollController.hasClients) {
+      Future.microtask(() {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(currentScrollPosition.clamp(0.0, _scrollController.position.maxScrollExtent));
         }
-
-        try {
-          SchedulePage.refreshSchedules(context);
-          // debugPrint('任务页面：已刷新日历页面');
-        } catch (e) {
-          // debugPrint('任务页面：刷新日历页面时出错：$e');
-        }
-
-        // 使用单次延迟刷新确保统计数据更新
-        // 用一个safe方法包装延迟操作
-        _safeDelayedRefresh();
-      },
-    );
+      });
+    }
   }
 
   // 安全地执行延迟刷新操作
@@ -491,7 +452,26 @@ class _TaskPageState extends State<TaskPage> {
   // 根据任务项查找对应的原始日程项
   ScheduleItem? _findOriginalScheduleItem(task_models.ScheduleItem taskItem) {
     try {
-      return _scheduleItems.firstWhere((item) => item.title == taskItem.title && DateTime(item.startTime.year, item.startTime.month, item.startTime.day) == taskItem.date && '${item.startTime.hour.toString().padLeft(2, '0')}:${item.startTime.minute.toString().padLeft(2, '0')}' == taskItem.startTime);
+      // 使用ID查找更可靠，但我们需要从标题、日期和时间来匹配
+      for (var item in _scheduleItems) {
+        // 检查标题是否匹配
+        if (item.title != taskItem.title) continue;
+
+        // 检查日期是否匹配
+        final itemDate = DateTime(item.startTime.year, item.startTime.month, item.startTime.day);
+        if (itemDate != taskItem.date) continue;
+
+        // 检查开始时间是否匹配
+        final itemStartTime = '${item.startTime.hour.toString().padLeft(2, '0')}:${item.startTime.minute.toString().padLeft(2, '0')}';
+        if (itemStartTime != taskItem.startTime) continue;
+
+        // 所有条件都匹配，找到了对应的原始日程项
+        print('找到匹配的原始日程项: ${item.id}, 标题: ${item.title}');
+        return item;
+      }
+
+      print('未找到匹配的原始日程项');
+      return null;
     } catch (e) {
       print('查找原始日程项出错: $e');
       return null;
@@ -790,6 +770,26 @@ class _TaskPageState extends State<TaskPage> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     return date.isBefore(today);
+  }
+}
+
+class SchedulePage extends StatefulWidget {
+  const SchedulePage({super.key});
+
+  // 添加刷新方法
+  static void refreshSchedules(BuildContext context) {
+    debugPrint('刷新日历页面');
+    // 实际实现可以在这里添加
+  }
+
+  @override
+  State<SchedulePage> createState() => _SchedulePageState();
+}
+
+class _SchedulePageState extends State<SchedulePage> {
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: Text('日历页面')));
   }
 }
 

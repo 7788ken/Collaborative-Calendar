@@ -108,8 +108,6 @@ class ApiService {
     }
   }
 
-  // 日历管理API
-
   // 创建共享日历并获取分享码
   Future<String> shareCalendar(CalendarBook calendar, List<ScheduleItem> schedules) async {
     // 先检查服务器状态

@@ -28,7 +28,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'calendar_app.db');
 
-    return await openDatabase(path, version: 3, onCreate: _createDatabase, onUpgrade: _upgradeDatabase);
+    return await openDatabase(path, version: 7, onCreate: _createDatabase, onUpgrade: _upgradeDatabase);
   }
 
   Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
@@ -110,6 +110,101 @@ class DatabaseHelper {
         print('迁移sharedWithUsers列时出错: $e');
       }
     }
+
+    // 添加shareCode字段到calendars表
+    if (oldVersion < 4) {
+      debugPrint('数据库升级: 为calendars表添加shareCode列');
+      try {
+        // 检查shareCode列是否已存在
+        var columns = await db.rawQuery('PRAGMA table_info(calendars)');
+        bool hasShareCode = columns.any((column) => column['name'] == 'shareCode');
+
+        if (!hasShareCode) {
+          await db.execute('ALTER TABLE calendars ADD COLUMN shareCode TEXT');
+          debugPrint('数据库升级: shareCode列添加成功');
+        } else {
+          debugPrint('数据库升级: shareCode列已存在，跳过');
+        }
+      } catch (e) {
+        debugPrint('数据库升级失败: $e');
+        // 如果出现错误，但不是列已存在的错误，则重新抛出
+        if (!e.toString().contains('duplicate column')) {
+          rethrow;
+        }
+      }
+    }
+
+    // 添加updated_at字段到schedules表
+    if (oldVersion < 5) {
+      debugPrint('数据库升级: 为schedules表添加updated_at列');
+      try {
+        // 检查updated_at列是否已存在
+        var columns = await db.rawQuery('PRAGMA table_info(schedules)');
+        bool hasUpdatedAt = columns.any((column) => column['name'] == 'updated_at');
+
+        if (!hasUpdatedAt) {
+          await db.execute('ALTER TABLE schedules ADD COLUMN updated_at INTEGER');
+          // 为现有记录设置默认值
+          final now = DateTime.now().millisecondsSinceEpoch;
+          await db.execute('UPDATE schedules SET updated_at = $now');
+          debugPrint('数据库升级: updated_at列添加成功');
+        } else {
+          debugPrint('数据库升级: updated_at列已存在，跳过');
+        }
+      } catch (e) {
+        debugPrint('数据库升级失败: $e');
+        // 如果出现错误，但不是列已存在的错误，则重新抛出
+        if (!e.toString().contains('duplicate column')) {
+          rethrow;
+        }
+      }
+    }
+
+    // 添加sync_status字段到schedules表
+    if (oldVersion < 6) {
+      debugPrint('数据库升级: 为schedules表添加sync_status列');
+      try {
+        // 检查sync_status列是否已存在
+        var columns = await db.rawQuery('PRAGMA table_info(schedules)');
+        bool hasSyncStatus = columns.any((column) => column['name'] == 'sync_status');
+
+        if (!hasSyncStatus) {
+          await db.execute('ALTER TABLE schedules ADD COLUMN sync_status INTEGER DEFAULT 1');
+          debugPrint('数据库升级: sync_status列添加成功');
+        } else {
+          debugPrint('数据库升级: sync_status列已存在，跳过');
+        }
+      } catch (e) {
+        debugPrint('数据库升级失败: $e');
+        // 如果出现错误，但不是列已存在的错误，则重新抛出
+        if (!e.toString().contains('duplicate column')) {
+          rethrow;
+        }
+      }
+    }
+
+    // 添加is_deleted字段到schedules表
+    if (oldVersion < 7) {
+      debugPrint('数据库升级: 为schedules表添加is_deleted列');
+      try {
+        // 检查is_deleted列是否已存在
+        var columns = await db.rawQuery('PRAGMA table_info(schedules)');
+        bool hasIsDeleted = columns.any((column) => column['name'] == 'is_deleted');
+
+        if (!hasIsDeleted) {
+          await db.execute('ALTER TABLE schedules ADD COLUMN is_deleted INTEGER DEFAULT 0');
+          debugPrint('数据库升级: is_deleted列添加成功');
+        } else {
+          debugPrint('数据库升级: is_deleted列已存在，跳过');
+        }
+      } catch (e) {
+        debugPrint('数据库升级失败: $e');
+        // 如果出现错误，但不是列已存在的错误，则重新抛出
+        if (!e.toString().contains('duplicate column')) {
+          rethrow;
+        }
+      }
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -123,7 +218,8 @@ class DatabaseHelper {
         ownerId TEXT,
         sharedWithUsers TEXT,
         createdAt INTEGER,
-        updatedAt INTEGER
+        updatedAt INTEGER,
+        shareCode TEXT
       )
     ''');
 
@@ -246,6 +342,13 @@ class DatabaseHelper {
     }
   }
 
+  // 修改日程的完成状态
+  Future<void> updateScheduleCompletionStatus(String scheduleId, bool isCompleted) async {
+    final db = await database;
+    await db.update('schedules', {'is_completed': isCompleted ? 1 : 0}, where: 'id = ?', whereArgs: [scheduleId]);
+    debugPrint('DatabaseHelper: 日程完成状态更新成功，ID: $scheduleId, 完成状态: $isCompleted');
+  }
+
   // 更新日程
   Future<void> updateSchedule(ScheduleItem schedule) async {
     try {
@@ -335,87 +438,6 @@ class DatabaseHelper {
       return List.generate(maps.length, (i) => ScheduleItem(id: maps[i]['id'], calendarId: maps[i]['calendar_id'], title: maps[i]['title'], description: maps[i]['description'], startTime: DateTime.fromMillisecondsSinceEpoch(maps[i]['start_time']), endTime: DateTime.fromMillisecondsSinceEpoch(maps[i]['end_time']), isAllDay: maps[i]['is_all_day'] == 1, location: maps[i]['location'], isCompleted: maps[i]['is_completed'] == 1));
     } catch (e) {
       debugPrint('DatabaseHelper: 根据ID获取日程时出错: $e');
-      return [];
-    }
-  }
-
-  // 获取最近修改的日程
-  Future<List<ScheduleItem>> getRecentlyModifiedSchedules(String calendarId) async {
-    try {
-      debugPrint('DatabaseHelper: 开始获取最近修改的日程');
-
-      // 检查数据库中是否有sync_status列
-      final db = await database;
-      var hasColumn = false;
-
-      try {
-        final result = await db.rawQuery('PRAGMA table_info(schedules)');
-        hasColumn = result.any((column) => column['name'] == 'sync_status');
-      } catch (e) {
-        debugPrint('DatabaseHelper: 检查表结构时出错: $e');
-      }
-
-      // 如果没有sync_status列，添加它
-      if (!hasColumn) {
-        debugPrint('DatabaseHelper: 添加sync_status列');
-        await db.execute('ALTER TABLE schedules ADD COLUMN sync_status INTEGER DEFAULT 0');
-      }
-
-      // 获取所有需要同步的日程（sync_status = 0或null）
-      final List<Map<String, dynamic>> maps = await db.query('schedules', where: 'calendar_id = ? AND (sync_status = 0 OR sync_status IS NULL)', whereArgs: [calendarId]);
-
-      debugPrint('DatabaseHelper: 找到 ${maps.length} 条需要同步的日程');
-
-      return List.generate(maps.length, (i) => ScheduleItem.fromMap(maps[i]));
-    } catch (e) {
-      debugPrint('DatabaseHelper: 获取最近修改的日程时出错: $e');
-      return [];
-    }
-  }
-
-  // 更新日程同步状态
-  Future<void> updateScheduleSyncStatus(String scheduleId, bool synced) async {
-    try {
-      debugPrint('DatabaseHelper: 更新日程同步状态, ID: $scheduleId, 状态: ${synced ? '已同步' : '未同步'}');
-
-      final db = await database;
-
-      // 检查数据库中是否有sync_status列
-      var hasColumn = false;
-      try {
-        final result = await db.rawQuery('PRAGMA table_info(schedules)');
-        hasColumn = result.any((column) => column['name'] == 'sync_status');
-      } catch (e) {
-        debugPrint('DatabaseHelper: 检查表结构时出错: $e');
-      }
-
-      // 如果没有sync_status列，添加它
-      if (!hasColumn) {
-        debugPrint('DatabaseHelper: 添加sync_status列');
-        await db.execute('ALTER TABLE schedules ADD COLUMN sync_status INTEGER DEFAULT 0');
-      }
-
-      // 更新同步状态
-      final updateCount = await db.update('schedules', {'sync_status': synced ? 1 : 0}, where: 'id = ?', whereArgs: [scheduleId]);
-
-      debugPrint('DatabaseHelper: 同步状态更新成功，更新了 $updateCount 条记录');
-    } catch (e) {
-      debugPrint('DatabaseHelper: 更新日程同步状态时出错: $e');
-    }
-  }
-
-  // 获取未同步的日程
-  Future<List<ScheduleItem>> getUnsyncedSchedules(String calendarId) async {
-    try {
-      debugPrint('DatabaseHelper: 开始获取未同步的日程');
-      final db = await database;
-
-      final List<Map<String, dynamic>> maps = await db.query('schedules', where: 'calendar_id = ? AND sync_status = 0', whereArgs: [calendarId]);
-
-      debugPrint('DatabaseHelper: 找到 ${maps.length} 条未同步的日程');
-      return List.generate(maps.length, (i) => ScheduleItem.fromMap(maps[i]));
-    } catch (e) {
-      debugPrint('DatabaseHelper: 获取未同步的日程时出错: $e');
       return [];
     }
   }

@@ -275,46 +275,6 @@ class CalendarDrawer extends StatelessWidget {
                       return WillPopScope(onWillPop: () async => false, child: const AlertDialog(content: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: 16), Text('正在从云端导入日历...')])));
                     },
                   );
-
-                  try {
-                    // 调用API导入日历
-                    final success = await calendarManager.importSharedCalendarFromCloud(shareCode);
-
-                    // 如果对话框仍在显示，则关闭它
-                    if (isDialogShowing && navigator.mounted) {
-                      navigator.pop();
-                      isDialogShowing = false;
-                    }
-
-                    // 显示导入结果
-                    if (success) {
-                      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('日历导入成功'), duration: Duration(seconds: 2)));
-                    } else {
-                      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('导入失败，该日历可能已存在或者分享码无效'), duration: Duration(seconds: 2)));
-                    }
-                  } catch (e) {
-                    // 如果对话框仍在显示，则关闭它
-                    if (isDialogShowing && navigator.mounted) {
-                      navigator.pop();
-                      isDialogShowing = false;
-                    }
-
-                    // 根据错误类型提供更有用的错误信息
-                    String errorMessage = '导入失败';
-
-                    if (e.toString().contains('网络连接错误') || e.toString().contains('SocketException')) {
-                      errorMessage = '网络连接错误，请检查网络后重试';
-                    } else if (e.toString().contains('超时')) {
-                      errorMessage = '连接服务器超时，请稍后重试';
-                    } else if (e.toString().contains('无效') || e.toString().contains('不存在')) {
-                      errorMessage = '分享码无效或日历不存在';
-                    } else if (e.toString().contains('已存在')) {
-                      errorMessage = '该日历已导入，请勿重复导入';
-                    }
-
-                    // 使用全局 ScaffoldMessenger 显示结果
-                    scaffoldMessenger.showSnackBar(SnackBar(content: Text(errorMessage), duration: const Duration(seconds: 2)));
-                  }
                 }
               },
               child: const Text('导入'),
@@ -440,9 +400,6 @@ class CalendarDrawer extends StatelessWidget {
                       );
 
                       try {
-                        // 复制日历
-                        await calendarManager.copyCalendarBook(sourceBook.id, nameController.text.trim(), selectedColor);
-
                         // 关闭加载对话框
                         Navigator.of(dialogContext).pop();
 
@@ -562,7 +519,7 @@ class CalendarDrawer extends StatelessWidget {
 
     // 获取分享码
     final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
-    final shareId = calendarManager.getShareId(book.id);
+    final shareCode = calendarManager.getShareCode(book.id);
 
     // 获取最后更新时间
     final updateTime = calendarManager.getLastUpdateTime(book.id);
@@ -603,16 +560,16 @@ class CalendarDrawer extends StatelessWidget {
                 decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)),
                 child: Row(
                   children: [
-                    Expanded(child: SelectableText(shareId ?? '未找到分享码', style: const TextStyle(fontWeight: FontWeight.bold))),
+                    Expanded(child: SelectableText(shareCode ?? '未找到分享码', style: const TextStyle(fontWeight: FontWeight.bold))),
                     IconButton(
                       icon: const Icon(Icons.copy),
                       onPressed: () async {
-                        if (shareId == null) {
+                        if (shareCode == null) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('分享码不存在'), backgroundColor: Colors.red, duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating));
-                          return;
+                          return; // 如果分享码为null，直接返回
                         }
                         // 使用 Clipboard 复制到剪贴板
-                        await Clipboard.setData(ClipboardData(text: shareId));
+                        await Clipboard.setData(ClipboardData(text: shareCode));
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('分享码已复制到剪贴板'), duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating));
                         }
@@ -727,26 +684,6 @@ class CalendarDrawer extends StatelessWidget {
         return const AlertDialog(content: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: 16), Text('正在将日历上传至云端...')]));
       },
     );
-
-    // 将日历标记为已分享
-    final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
-
-    try {
-      // 使用API服务上传日历到云端并获取分享码
-      final serverShareId = await calendarManager.shareCalendarToCloud(book.id);
-
-      // 关闭加载对话框
-      Navigator.of(context).pop();
-
-      // 显示分享成功对话框（使用服务器返回的分享码）
-      _showShareCalendarSuccessDialog(context, book, serverShareId);
-    } catch (e) {
-      // 关闭加载对话框
-      Navigator.of(context).pop();
-
-      // 显示错误提示
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('分享失败: $e')));
-    }
   }
 
   // 显示分享成功对话框（使用服务器返回的分享码）

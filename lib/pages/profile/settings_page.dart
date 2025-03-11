@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import '../../data/schedule_data.dart';
 import 'package:provider/provider.dart';
 import '../../main.dart'; // 导入 ThemeProvider
-import '../../data/schedule_service.dart'; // 添加日程服务的导入
-import '../../pages/schedule/schedule_page.dart'; // 添加日历页面的导入
-import '../../data/calendar_book_manager.dart'; // 添加日历管理器的导入
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});

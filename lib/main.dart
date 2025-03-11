@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // 添加 services 包导入
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
-import 'pages/schedule/schedule_page.dart';
 import 'pages/task/task_page.dart';
 import 'pages/profile/profile_page.dart';
 import 'pages/calendar/calendar_page.dart'; // 添加日历页面导入
@@ -252,30 +251,11 @@ class _MainPageState extends State<MainPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                // 添加刷新按钮，仅在日历页面显示
-                if (_currentIndex != 2)
-                  Consumer<CalendarBookManager>(
-                    builder: (context, calendarManager, _) {
-                      final activeBook = calendarManager.activeBook;
-                      // 只有共享日历才显示刷新按钮
-                      if (activeBook != null && activeBook.isShared) {
-                        return IconButton(
-                          icon: const Icon(Icons.sync),
-                          tooltip: '检查日历更新',
-                          onPressed: () {
-                            // TODO: 实现检查日历更新功能
-                          },
-                        );
-                      } else {
-                        return const SizedBox(); // 如果不是共享日历，则不显示按钮
-                      }
-                    },
-                  ),
                 IconButton(
                   icon: const Icon(Icons.add_circle_outline),
                   onPressed: () {
-                    // 添加日程按钮
-                    // TODO: 实现添加日程功能
+                    // 跳转到添加日程页面
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AddSchedulePage()));
                   },
                 ), // 添加日程按钮
               ],
