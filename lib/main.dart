@@ -13,6 +13,7 @@ import 'data/models/calendar_book.dart';
 import 'data/schedule_data.dart';
 import 'utils/sync_helper.dart'; // 添加 SyncHelper 导入
 import 'data/schedule_service.dart';
+import 'data/database/database_helper.dart';
 // import 'package:flutter/rendering.dart';
 
 // 添加主题状态管理类
@@ -70,6 +71,16 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // 确保这行在最前面
 
   try {
+    // 重置数据库以解决表结构问题
+    // final dbHelper = DatabaseHelper();
+    // try {
+    //   await dbHelper.resetDatabase();
+    //   debugPrint('数据库已重置，表结构已更新');
+    // } catch (e) {
+    //   debugPrint('重置数据库失败: $e');
+    //   // 继续执行，尝试正常初始化
+    // }
+
     final themeProvider = ThemeProvider();
     await themeProvider.init(); // 等待初始化完成
 

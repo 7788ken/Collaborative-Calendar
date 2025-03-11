@@ -22,13 +22,6 @@ class CalendarBookManager with ChangeNotifier {
   Map<String, DateTime?> _lastUpdateTimeMap = {}; // 用于存储日历本ID到最后更新时间的映射
   static const String _activeBookIdKey = 'active_calendar_book_id';
 
-  // 定时器，用于定期检查日历更新
-  Timer? _updateCheckTimer;
-  // 定时器间隔（默认5分钟检查一次）
-  static const Duration _updateCheckInterval = Duration(minutes: 5);
-  // 是否启用定时同步（默认关闭）
-  bool _enablePeriodicSync = false;
-
   // 检查服务器是否可用
   Future<bool> checkServerAvailability() async {
     try {
@@ -56,7 +49,20 @@ class CalendarBookManager with ChangeNotifier {
 
   // 获取日历本最后更新时间
   DateTime? getLastUpdateTime(String calendarId) {
-    return _lastUpdateTimeMap[calendarId];
+    // 首先尝试从缓存中获取更新时间
+    final cachedTime = _lastUpdateTimeMap[calendarId];
+    if (cachedTime != null) {
+      return cachedTime;
+    }
+
+    // 如果缓存中没有，尝试从日历本对象中获取
+    try {
+      final book = _books.firstWhere((book) => book.id == calendarId);
+      return book.updatedAt;
+    } catch (e) {
+      // 如果找不到日历本，返回null
+      return null;
+    }
   }
 
   // 更新最后修改时间（如果日历是共享的）
@@ -393,16 +399,16 @@ class CalendarBookManager with ChangeNotifier {
     }
   }
 
-  // 创建新日历本
-  Future<void> createBook(String name, Color color) async {
-    final newBook = CalendarBook(id: DateTime.now().millisecondsSinceEpoch.toString(), name: name, color: color);
+  // 页面事件-创建新日历本
+  Future<void> Page_function_createBook(String name, Color color) async {
+    debugPrint('页面事件-创建新日历本: $name, $color');
+    final newBook = CalendarBook.create(name: name, color: color);
 
     // 保存到数据库
     await _dbHelper.insertCalendarBook(newBook);
 
     // 更新内存中的列表
     _books.add(newBook);
-    notifyListeners();
   }
 
   // 更新日历本名称
@@ -416,6 +422,10 @@ class CalendarBookManager with ChangeNotifier {
 
       // 更新内存中的列表
       _books[index] = updatedBook;
+
+      // 更新最后更新时间映射
+      _lastUpdateTimeMap[id] = updatedBook.updatedAt;
+
       notifyListeners();
     }
   }
@@ -431,6 +441,10 @@ class CalendarBookManager with ChangeNotifier {
 
       // 更新内存中的列表
       _books[index] = updatedBook;
+
+      // 更新最后更新时间映射
+      _lastUpdateTimeMap[id] = updatedBook.updatedAt;
+
       notifyListeners();
     }
   }
@@ -447,6 +461,10 @@ class CalendarBookManager with ChangeNotifier {
 
       // 更新内存中的列表
       _books[index] = updatedBook;
+
+      // 更新最后更新时间映射
+      _lastUpdateTimeMap[id] = updatedBook.updatedAt;
+
       notifyListeners();
     }
   }
@@ -1379,6 +1397,9 @@ class CalendarBookManager with ChangeNotifier {
         debugPrint('加载日历同步时间失败: $e');
       }
 
+      // 加载所有日历本的更新时间
+      await _loadCalendarUpdateTimes();
+
       // 加载完成后，更新所有共享日历的最后修改时间
       // 使用防御性编程，确保即使更新失败也不会中断初始化
       try {
@@ -1391,13 +1412,6 @@ class CalendarBookManager with ChangeNotifier {
         }
       } catch (e) {
         debugPrint('更新当前共享日历时间失败，但继续初始化: $e');
-      }
-
-      // 只有在启用定时同步时才启动定时器
-      if (_enablePeriodicSync) {
-        _startUpdateCheckTimer();
-      } else {
-        debugPrint('定时同步功能已关闭，不启动定时器');
       }
 
       // 通知监听器完成初始化
@@ -1445,5 +1459,25 @@ class CalendarBookManager with ChangeNotifier {
     final isCompleted = scheduleData['isCompleted'] == 1 || scheduleData['isCompleted'] == true;
 
     return ScheduleItem(id: scheduleId, calendarId: calendarId, title: scheduleData['title'], description: scheduleData['description'], startTime: startDateTime, endTime: endDateTime, isAllDay: scheduleData['isAllDay'] == 1 || scheduleData['isAllDay'] == true, location: scheduleData['location'], isCompleted: isCompleted);
+  }
+
+  // 从数据库加载日历本的更新时间
+  Future<void> _loadCalendarUpdateTimes() async {
+    try {
+      debugPrint('开始从数据库加载日历本更新时间');
+
+      // 遍历所有日历本
+      for (final book in _books) {
+        // 如果缓存中没有该日历本的更新时间，则使用日历本自身的更新时间
+        if (!_lastUpdateTimeMap.containsKey(book.id)) {
+          _lastUpdateTimeMap[book.id] = book.updatedAt;
+          debugPrint('已加载日历 ${book.id} 的更新时间: ${book.updatedAt}');
+        }
+      }
+
+      debugPrint('已完成所有日历本更新时间的加载');
+    } catch (e) {
+      debugPrint('加载日历本更新时间失败: $e');
+    }
   }
 }

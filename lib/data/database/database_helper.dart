@@ -50,6 +50,66 @@ class DatabaseHelper {
         }
       }
     }
+
+    if (oldVersion < 2) {
+      // 版本1到版本2的迁移：添加创建时间和更新时间字段
+      try {
+        await db.execute('ALTER TABLE calendars ADD COLUMN createdAt INTEGER');
+        await db.execute('ALTER TABLE calendars ADD COLUMN updatedAt INTEGER');
+
+        // 为现有记录设置默认值
+        final now = DateTime.now().millisecondsSinceEpoch;
+        await db.execute('UPDATE calendars SET createdAt = $now, updatedAt = $now WHERE createdAt IS NULL');
+      } catch (e) {
+        print('迁移数据库时出错: $e');
+      }
+    }
+
+    // 修复sharedWithUsers列类型问题
+    if (oldVersion < 3) {
+      try {
+        // 检查列是否存在
+        var columns = await db.rawQuery('PRAGMA table_info(calendars)');
+        bool hasSharedWithUsers = columns.any((column) => column['name'] == 'sharedWithUsers');
+
+        // 如果列已存在但类型不对，需要迁移数据
+        if (hasSharedWithUsers) {
+          // 创建临时表
+          await db.execute('''
+            CREATE TABLE calendars_temp(
+              id TEXT PRIMARY KEY,
+              name TEXT,
+              color INTEGER,
+              isShared INTEGER,
+              ownerId TEXT,
+              sharedWithUsers TEXT,
+              createdAt INTEGER,
+              updatedAt INTEGER
+            )
+          ''');
+
+          // 将数据复制到临时表
+          await db.execute('''
+            INSERT INTO calendars_temp 
+            SELECT id, name, color, isShared, ownerId, 
+                   '[]', -- 初始化为空JSON数组
+                   COALESCE(createdAt, ${DateTime.now().millisecondsSinceEpoch}),
+                   COALESCE(updatedAt, ${DateTime.now().millisecondsSinceEpoch})
+            FROM calendars
+          ''');
+
+          // 删除原表并重命名临时表
+          await db.execute('DROP TABLE calendars');
+          await db.execute('ALTER TABLE calendars_temp RENAME TO calendars');
+        }
+        // 如果列不存在，添加它
+        else {
+          await db.execute('ALTER TABLE calendars ADD COLUMN sharedWithUsers TEXT DEFAULT "[]"');
+        }
+      } catch (e) {
+        print('迁移sharedWithUsers列时出错: $e');
+      }
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -57,15 +117,13 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE calendars(
         id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        color INTEGER NOT NULL,
-        is_shared INTEGER NOT NULL,
-        owner_id TEXT,
-        shared_with_users TEXT,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        share_code TEXT,
-        share_expire_time INTEGER
+        name TEXT,
+        color INTEGER,
+        isShared INTEGER,
+        ownerId TEXT,
+        sharedWithUsers TEXT,
+        createdAt INTEGER,
+        updatedAt INTEGER
       )
     ''');
 
@@ -90,7 +148,7 @@ class DatabaseHelper {
     ''');
 
     // 初始化默认日历本
-    await db.insert('calendars', {'id': 'default', 'title': '我的日历', 'color': Colors.blue.value, 'is_shared': 0, 'owner_id': null, 'shared_with_users': '[]', 'created_at': DateTime.now().millisecondsSinceEpoch, 'updated_at': DateTime.now().millisecondsSinceEpoch, 'share_code': null, 'share_expire_time': null});
+    await db.insert('calendars', {'id': 'default', 'name': '我的日历', 'color': Colors.blue.value, 'isShared': 0, 'ownerId': null, 'sharedWithUsers': '[]', 'createdAt': DateTime.now().millisecondsSinceEpoch, 'updatedAt': DateTime.now().millisecondsSinceEpoch});
   }
 
   // ==================== 日历本操作 ====================
@@ -102,23 +160,25 @@ class DatabaseHelper {
 
     return List.generate(maps.length, (i) {
       final map = maps[i];
-      // 处理shared_with_users字段，将JSON字符串转换为List<String>
-      final sharedWithUsersJson = map['shared_with_users'] as String? ?? '[]';
+      // 处理sharedWithUsers字段，将JSON字符串转换为List<String>
+      final sharedWithUsersJson = map['sharedWithUsers'] as String? ?? '[]';
       final sharedWithUsers = List<String>.from(jsonDecode(sharedWithUsersJson) as List<dynamic>);
 
-      return CalendarBook.fromMap({...map, 'shared_with_users': sharedWithUsers});
+      return CalendarBook.fromMap({...map, 'sharedWithUsers': sharedWithUsers});
     });
   }
 
   // 插入日历本
-  Future<void> insertCalendarBook(CalendarBook book) async {
-    final db = await database;
-    final bookMap = book.toMap();
-
-    // 将shared_with_users转换为JSON字符串
-    bookMap['shared_with_users'] = jsonEncode(bookMap['shared_with_users']);
-
-    await db.insert('calendars', bookMap, conflictAlgorithm: ConflictAlgorithm.replace);
+  Future<int> insertCalendarBook(CalendarBook book) async {
+    try {
+      final db = await database;
+      return await db.insert('calendars', book.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    } catch (e) {
+      print('插入日历本时出错: $e');
+      // 打印插入的值，帮助调试
+      print('尝试插入的数据: ${book.toMap()}');
+      rethrow;
+    }
   }
 
   // 更新日历本
@@ -398,6 +458,31 @@ class DatabaseHelper {
       return count;
     } catch (e) {
       debugPrint('DatabaseHelper: 删除日历中所有日程时出错: $e');
+      rethrow;
+    }
+  }
+
+  // 重置数据库（删除并重新创建）
+  Future<void> resetDatabase() async {
+    try {
+      debugPrint('开始重置数据库...');
+      String path = join(await getDatabasesPath(), 'calendar_app.db');
+
+      // 关闭现有数据库连接
+      if (_database != null) {
+        await _database!.close();
+        _database = null;
+      }
+
+      // 删除数据库文件
+      await deleteDatabase(path);
+      debugPrint('数据库文件已删除');
+
+      // 重新初始化数据库
+      _database = await _initDatabase();
+      debugPrint('数据库已重新创建');
+    } catch (e) {
+      debugPrint('重置数据库时出错: $e');
       rethrow;
     }
   }

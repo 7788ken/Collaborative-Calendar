@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../data/calendar_book_manager.dart';
 import '../data/models/calendar_book.dart';
+import 'package:intl/intl.dart'; // 添加日期格式化库
 
 class CalendarDrawer extends StatelessWidget {
   const CalendarDrawer({Key? key}) : super(key: key);
@@ -32,7 +33,7 @@ class CalendarDrawer extends StatelessWidget {
                   Text('当前: ${currentBook?.name ?? ""}', style: const TextStyle(color: Colors.white, fontSize: 16)),
                   //最后更新时间
                   const SizedBox(height: 8),
-                  Text('最后更新: TODO:待实现', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  if (currentBook != null && currentBook.updatedAt != null) Text('最后更新: ${_formatDateTime(currentBook.updatedAt)}', style: const TextStyle(color: Colors.white, fontSize: 12)) else const Text('最后更新: 未知', style: TextStyle(color: Colors.white, fontSize: 12)),
                   const SizedBox(height: 8),
                 ],
               ),
@@ -59,19 +60,19 @@ class CalendarDrawer extends StatelessWidget {
                                   ),
                                   child: Text(!book.isShared ? '本地日历' : '云端日历', style: TextStyle(fontSize: 10, color: book.isShared ? book.color.withAlpha(200) : Colors.grey)),
                                 ),
-                                if (book.isShared) // 如果是共享日历，显示最后更新时间
+                                const SizedBox(width: 4),
+                                Builder(
+                                  builder: (context) {
+                                    // 获取日历最后更新时间
+                                    final updateTime = calendarManager.getLastUpdateTime(book.id);
+                                    final timeText = updateTime != null ? _formatDateTime(updateTime) : _formatDateTime(book.updatedAt);
+
+                                    return Text('最后更新: $timeText', style: TextStyle(fontSize: 10, color: Colors.blue.shade700));
+                                  },
+                                ),
+                                if (book.isShared) // 显示最后更新时间
                                   Row(
                                     children: [
-                                      const SizedBox(width: 4),
-                                      Builder(
-                                        builder: (context) {
-                                          // 获取日历最后更新时间
-                                          final updateTime = calendarManager.getLastUpdateTime(book.id);
-                                          final timeText = 'TODO:待实现';
-
-                                          return Text('最后更新: $timeText', style: TextStyle(fontSize: 10, color: Colors.blue.shade700));
-                                        },
-                                      ),
                                       // 刷新按钮（保持原有的布局结构）
                                       const SizedBox(width: 4),
                                       SizedBox(
@@ -115,7 +116,7 @@ class CalendarDrawer extends StatelessWidget {
             // 底部固定区域
             const Divider(height: 1),
 
-            // 创建新日历
+            // 按钮-创建新日历
             ListTile(
               leading: const Icon(Icons.add_circle_outline, color: Colors.blue),
               title: const Text('创建新日历'),
@@ -124,7 +125,7 @@ class CalendarDrawer extends StatelessWidget {
               },
             ),
 
-            // 导入日历
+            // 按钮-导入日历
             ListTile(
               leading: const Icon(Icons.file_download_outlined, color: Colors.orange),
               title: const Text('导入日历'),
@@ -136,6 +137,38 @@ class CalendarDrawer extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // 添加一个格式化日期时间的方法，确保处理null值
+  String _formatDateTime(DateTime? dateTime) {
+    // 如果日期为null，直接返回未知
+    if (dateTime == null) return '未知';
+
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    // 今天内的更新显示小时和分钟
+    if (difference.inDays == 0) {
+      return DateFormat('今天 HH:mm').format(dateTime);
+    }
+
+    // 昨天的更新
+    if (difference.inDays == 1) {
+      return DateFormat('昨天 HH:mm').format(dateTime);
+    }
+
+    // 一周内的更新
+    if (difference.inDays < 7) {
+      return DateFormat('EEEE HH:mm', 'zh_CN').format(dateTime);
+    }
+
+    // 今年内的更新
+    if (dateTime.year == now.year) {
+      return DateFormat('MM-dd HH:mm').format(dateTime);
+    }
+
+    // 超过一年的更新
+    return DateFormat('yyyy-MM-dd HH:mm').format(dateTime);
   }
 
   // 显示创建日历对话框
@@ -186,7 +219,7 @@ class CalendarDrawer extends StatelessWidget {
                   onPressed: () {
                     if (nameController.text.trim().isNotEmpty) {
                       final calendarManager = Provider.of<CalendarBookManager>(context, listen: false);
-                      calendarManager.createBook(nameController.text.trim(), selectedColor);
+                      calendarManager.Page_function_createBook(nameController.text.trim(), selectedColor);
                       Navigator.of(context).pop();
                     }
                   },
