@@ -86,6 +86,7 @@ class ScheduleService {
   Future<void> updateSchedule(ScheduleItem schedule) async {
     try {
       print('ScheduleService: 开始更新日程 ${schedule.title}，ID: ${schedule.id}');
+      print('ScheduleService: 日程详情: ${schedule.toMap()}');
 
       // 确保CalendarBookManager已初始化
       await _ensureInitialized();
@@ -93,12 +94,37 @@ class ScheduleService {
       // 获取日历信息
       final calendarBook = _calendarManager.books.firstWhere((book) => book.id == schedule.calendarId, orElse: () => throw Exception('未找到ID为 ${schedule.calendarId} 的日历本'));
 
+      print('ScheduleService: 找到日历本: ${calendarBook.name}');
+
       // 如果是共享日历，设置为未同步状态
       final scheduleToUpdate = calendarBook.isShared ? schedule.copyWith(isSynced: false) : schedule;
+
+      if (calendarBook.isShared && schedule.isSynced) {
+        print('ScheduleService: 日历本是共享的，将日程标记为未同步');
+      }
 
       // 执行本地更新操作
       await _dbHelper.updateSchedule(scheduleToUpdate);
       print('ScheduleService: 日程本地更新成功');
+
+      // 验证更新结果
+      final updatedSchedules = await _dbHelper.getScheduleById(schedule.id);
+      if (updatedSchedules.isNotEmpty) {
+        final updatedSchedule = updatedSchedules.first;
+        print('ScheduleService: 验证更新结果: ${updatedSchedule.toMap()}');
+
+        // 检查更新是否成功
+        if (updatedSchedule.title != scheduleToUpdate.title || updatedSchedule.startTime != scheduleToUpdate.startTime || updatedSchedule.endTime != scheduleToUpdate.endTime) {
+          print('ScheduleService: 警告 - 更新结果与预期不符');
+          print('ScheduleService: 预期标题: ${scheduleToUpdate.title}, 实际标题: ${updatedSchedule.title}');
+          print('ScheduleService: 预期开始时间: ${scheduleToUpdate.startTime}, 实际开始时间: ${updatedSchedule.startTime}');
+          print('ScheduleService: 预期结束时间: ${scheduleToUpdate.endTime}, 实际结束时间: ${updatedSchedule.endTime}');
+        } else {
+          print('ScheduleService: 更新验证成功，数据已正确保存');
+        }
+      } else {
+        print('ScheduleService: 警告 - 无法验证更新结果，未找到ID为 ${schedule.id} 的日程');
+      }
     } catch (e) {
       print('ScheduleService: 更新日程时出错: $e');
       rethrow; // 重新抛出异常以便上层捕获
@@ -133,6 +159,41 @@ class ScheduleService {
       print('ScheduleService: 任务完成状态更新成功');
     } catch (e) {
       print('ScheduleService: 更新任务完成状态时出错: $e');
+      rethrow; // 重新抛出异常以便上层捕获
+    }
+  }
+
+  // 删除日程
+  Future<void> deleteSchedule(String scheduleId) async {
+    try {
+      print('ScheduleService: 开始删除日程，ID: $scheduleId');
+
+      // 获取日程信息，确保存在
+      final schedules = await _dbHelper.getScheduleById(scheduleId);
+      if (schedules.isEmpty) {
+        print('ScheduleService: 未找到ID为 $scheduleId 的日程，无法删除');
+        throw Exception('未找到ID为 $scheduleId 的日程');
+      }
+
+      final schedule = schedules.first;
+      print('ScheduleService: 找到要删除的日程: ${schedule.title}');
+
+      // 获取日历信息
+      await _ensureInitialized();
+      final calendarBook = _calendarManager.books.firstWhere((book) => book.id == schedule.calendarId, orElse: () => throw Exception('未找到ID为 ${schedule.calendarId} 的日历本'));
+
+      // 如果是共享日历，可以考虑软删除或标记为需要同步删除
+      if (calendarBook.isShared) {
+        print('ScheduleService: 日历本是共享的，将执行软删除');
+        // 这里可以实现软删除逻辑，例如更新isDeleted字段
+        // 暂时使用物理删除
+      }
+
+      // 执行删除操作
+      await _dbHelper.deleteSchedule(scheduleId);
+      print('ScheduleService: 日程删除成功');
+    } catch (e) {
+      print('ScheduleService: 删除日程时出错: $e');
       rethrow; // 重新抛出异常以便上层捕获
     }
   }

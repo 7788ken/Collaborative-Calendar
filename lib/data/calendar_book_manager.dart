@@ -299,7 +299,7 @@ class CalendarBookManager with ChangeNotifier {
         }
       }
 
-      // 从SharedPreferences加载所有日历的最后同步时间
+      // 从SharedPreferences加载所有日历的最后修改时间
       try {
         final prefs = await SharedPreferences.getInstance();
 
@@ -312,15 +312,15 @@ class CalendarBookManager with ChangeNotifier {
               if (timestamp != null) {
                 final syncTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
                 _lastUpdateTimeMap[book.id] = syncTime;
-                debugPrint('已加载日历 ${book.id} 的最后同步时间: $syncTime');
+                debugPrint('已加载日历 ${book.id} 的最后修改时间: $syncTime');
               }
             }
           }
         }
 
-        debugPrint('已加载所有日历的最后同步时间');
+        debugPrint('已加载所有日历的最后修改时间');
       } catch (e) {
-        debugPrint('加载日历同步时间失败: $e');
+        debugPrint('加载日历修改时间失败: $e');
       }
 
       // 加载所有日历本的更新时间

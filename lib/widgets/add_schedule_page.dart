@@ -215,24 +215,29 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         location: _locationController.text.isEmpty ? null : _locationController.text.trim(),
         createdAt: dbSchedule.createdAt, // 使用数据库中的创建时间
         isCompleted: dbSchedule.isCompleted, // 使用数据库中的完成状态
+        isSynced: dbSchedule.isSynced, // 保留原始同步状态
+        isDeleted: dbSchedule.isDeleted, // 保留原始删除状态
       );
 
       // 添加调试输出
-      // print('准备更新日程: ${updatedSchedule.title}');
-      // print('日程ID: ${updatedSchedule.id}');
-      // print('日程所属日历本ID(更新前确认): ${updatedSchedule.calendarId}');
-      // print('强制确认日历本ID是否为数据库中的ID: ${updatedSchedule.calendarId == realCalendarId}');
-      // print('日程详细信息: ${updatedSchedule.toMap()}');
+      print('准备更新日程: ${updatedSchedule.title}');
+      print('日程ID: ${updatedSchedule.id}');
+      print('日程所属日历本ID: ${updatedSchedule.calendarId}');
+      print('日程开始时间: ${updatedSchedule.startTime}');
+      print('日程结束时间: ${updatedSchedule.endTime}');
+      print('日程完成状态: ${updatedSchedule.isCompleted}');
+      print('日程同步状态: ${updatedSchedule.isSynced}');
+      print('日程详细信息: ${updatedSchedule.toMap()}');
 
       // 保存到数据库
-      // print('调用更新日程方法');
-      // print('原始日程ID: ${dbSchedule.id}');
-      // print('更新后日程ID: ${updatedSchedule.id}');
+      print('调用更新日程方法');
+      print('原始日程ID: ${dbSchedule.id}');
+      print('更新后日程ID: ${updatedSchedule.id}');
       try {
         await _scheduleService.updateSchedule(updatedSchedule);
-        // print('日程更新成功');
+        print('日程更新成功');
       } catch (e) {
-        // print('日程更新失败: $e');
+        print('日程更新失败: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('更新失败: ${e.toString()}')));
         }
@@ -248,7 +253,7 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
       // 返回上一页
       return _finishAndReturnSuccess();
     } catch (e) {
-      // print('更新日程时出错: $e');
+      print('更新日程时出错: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('更新失败: $e')));
       }
@@ -261,7 +266,25 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
 
   // 判断是否需要同步到云端
   Future<void> _syncToCloudIfNeeded(CalendarBookManager calendarManager, ScheduleItem schedule) async {
-    // 待完成
+    // 检查日历本是否为共享日历
+    final calendarBook = calendarManager.books.firstWhere((book) => book.id == schedule.calendarId, orElse: () => throw Exception('未找到ID为 ${schedule.calendarId} 的日历本'));
+
+    // 如果是共享日历且未同步，则需要同步到云端
+    if (calendarBook.isShared && !schedule.isSynced) {
+      print('日程需要同步到云端: ${schedule.title}');
+      // 这里可以添加同步到云端的逻辑
+      // 目前仅打印日志，实际实现可以在后续添加
+    } else {
+      print('日程不需要同步到云端: ${schedule.title}');
+    }
+
+    // 无论是否需要同步，都确保本地数据已正确更新
+    // 验证数据库中的数据
+    final updatedSchedules = await _scheduleService.getScheduleById(schedule.id);
+    if (updatedSchedules.isNotEmpty) {
+      final updatedSchedule = updatedSchedules.first;
+      print('验证数据库中的日程: ${updatedSchedule.toMap()}');
+    }
   }
 
   // 完成操作并返回

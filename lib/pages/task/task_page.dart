@@ -308,9 +308,42 @@ class _TaskPageState extends State<TaskPage> {
               TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
               TextButton(
                 onPressed: () async {
-                  // 删除日程 todo 需要删除数据库中的日程
-                  // 刷新任务列表
-                  _loadTasks();
+                  // 关闭对话框
+                  Navigator.of(context).pop();
+
+                  // 显示加载指示器
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在删除...'), duration: Duration(seconds: 1)));
+
+                  try {
+                    // 删除日程
+                    await _scheduleService.deleteSchedule(originalItem.id);
+
+                    // 删除任务完成状态
+                    final scheduleData = Provider.of<ScheduleData>(context, listen: false);
+                    final taskKey = '${originalItem.startTime.year}-${originalItem.startTime.month}-${originalItem.startTime.day}-${originalItem.id}';
+                    await scheduleData.removeTaskCompletionStatus(taskKey);
+
+                    // 显示成功消息
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('日程已删除')));
+                    }
+
+                    // 刷新任务列表
+                    _loadTasks();
+
+                    // 刷新日历页面
+                    if (mounted) {
+                      Future.delayed(const Duration(milliseconds: 300), () {
+                        SchedulePage.refreshSchedules(context);
+                      });
+                    }
+                  } catch (e) {
+                    // 显示错误消息
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+                    }
+                    print('删除日程时出错: $e');
+                  }
                 },
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
                 child: const Text('删除'),
@@ -480,6 +513,8 @@ class _TaskPageState extends State<TaskPage> {
 
   // 编辑日程
   void _editSchedule(ScheduleItem scheduleItem) {
+    print('开始编辑日程: ${scheduleItem.title}, ID: ${scheduleItem.id}');
+
     // 显示日程编辑页面
     Navigator.push(context, MaterialPageRoute(builder: (context) => AddSchedulePage(scheduleItem: scheduleItem))).then((result) {
       // 如果编辑成功，刷新任务列表
@@ -492,21 +527,42 @@ class _TaskPageState extends State<TaskPage> {
 
         // 先强制刷新ScheduleData，通知所有监听者
         scheduleData.forceRefresh();
+        print('已强制刷新ScheduleData');
 
-        // 使用单次延迟刷新，避免多次不必要的刷新
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            // 刷新任务页面
-            if (TaskPage.globalKey.currentState != null) {
-              TaskPage.globalKey.currentState!.reloadTasks();
-            } else {
-              TaskPage.refreshTasks(context);
-            }
+        // 立即重新加载任务列表
+        _loadTasks().then((_) {
+          print('已重新加载任务列表');
 
-            // 显示成功提示
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('任务已更新')));
-          }
+          // 重新加载任务完成状态
+          scheduleData.loadTaskCompletionStatus().then((_) {
+            print('编辑后重新加载任务完成状态成功');
+
+            // 使用单次延迟刷新，避免多次不必要的刷新
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (mounted) {
+                print('执行延迟刷新');
+
+                // 刷新任务页面
+                if (TaskPage.globalKey.currentState != null) {
+                  print('通过GlobalKey刷新任务页面');
+                  TaskPage.globalKey.currentState!.reloadTasks();
+                } else {
+                  print('通过context刷新任务页面');
+                  TaskPage.refreshTasks(context);
+                }
+
+                // 刷新日历页面
+                print('刷新日历页面');
+                SchedulePage.refreshSchedules(context);
+
+                // 显示成功提示
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('任务已更新')));
+              }
+            });
+          });
         });
+      } else {
+        print('编辑任务取消或失败');
       }
     });
   }

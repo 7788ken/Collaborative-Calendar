@@ -202,7 +202,13 @@ class ScheduleData extends ChangeNotifier {
     // 仅调用通知，不做其他操作
     debugPrint('强制刷新日历页面状态');
     try {
+      // 先清除缓存，确保下次获取数据时会重新加载
+      _isLoaded = false;
+
+      // 通知所有监听者
       notifyListeners();
+
+      debugPrint('强制刷新通知发送成功');
     } catch (e) {
       debugPrint('强制刷新时通知出错: $e');
     }

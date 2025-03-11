@@ -129,7 +129,6 @@ class _TaskItemWidgetState extends State<TaskItemWidget> with SingleTickerProvid
                         // 添加当前活动日历本ID
                         final calendarManager = CalendarBookManager(); // 获取日历管理器实例
                         final activeCalendarId = calendarManager.activeBook?.id ?? 'default';
-                        print('编辑任务，使用当前活动日历本ID: $activeCalendarId');
                         widget.onEdit(
                           widget.item.toCalendarSchedule(
                             id: widget.originalId,
@@ -225,7 +224,7 @@ class _TaskItemWidgetState extends State<TaskItemWidget> with SingleTickerProvid
                                                 mainAxisAlignment: MainAxisAlignment.center,
                                                 children: [
                                                   // 删除空白容器
-                                                  Text(widget.item.title + '-' + widget.item.isCompleted.toString(), style: Theme.of(context).textTheme.titleMedium?.copyWith(decoration: widget.item.isCompleted ? TextDecoration.lineThrough : null, color: widget.item.isCompleted ? Colors.grey : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                                  Text(widget.item.title, style: Theme.of(context).textTheme.titleMedium?.copyWith(decoration: widget.item.isCompleted ? TextDecoration.lineThrough : null, color: widget.item.isCompleted ? Colors.grey : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
                                                   // 未完成状态显示详细信息
                                                   if (!widget.item.isCompleted) ...[
                                                     if (widget.item.location.isNotEmpty) ...[
@@ -261,7 +260,7 @@ class _TaskItemWidgetState extends State<TaskItemWidget> with SingleTickerProvid
                                               onPressed: () {
                                                 // 添加振动反馈
                                                 HapticFeedback.lightImpact();
-                                                //切换日程的同步状态
+                                                //切换日程的完成状态
                                                 widget.onToggleComplete();
                                               },
                                               tooltip: widget.item.isCompleted ? '标记为未完成' : '标记为已完成',
